@@ -63,8 +63,9 @@ async function checkAuthPreflight(config: Config): Promise<string | null> {
     if (res.status === 401 || res.status === 403) {
       return `Auth failed (HTTP ${res.status}) at ${modelsUrl}. Check your API key.`;
     }
-  } catch {
+  } catch (err) {
     // Network error or timeout — skip preflight, let the session surface the real error
+    debugLogger.debug('preflight network error', err);
   }
   return null;
 }
@@ -182,7 +183,26 @@ export async function runNonInteractive(
     // Auth pre-flight: fail fast before any session work
     const authError = await checkAuthPreflight(config);
     if (authError) {
-      process.stderr.write(`proto: ${authError}\n`);
+      if (
+        outputFormat === OutputFormat.JSON ||
+        outputFormat === OutputFormat.STREAM_JSON
+      ) {
+        const systemMessage = await buildSystemMessage(
+          config,
+          sessionId,
+          permissionMode,
+        );
+        adapter.emitMessage(systemMessage);
+        adapter.emitResult({
+          isError: true,
+          durationMs: 0,
+          apiDurationMs: 0,
+          numTurns: 0,
+          errorMessage: authError,
+        });
+      } else {
+        process.stderr.write(`proto: ${authError}\n`);
+      }
       process.exit(1);
     }
 

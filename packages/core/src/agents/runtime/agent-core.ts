@@ -369,10 +369,10 @@ export class AgentCore {
     // ── P0b: Analysis-only loop detection ────────────────────
     // Tracks turns where the model makes tool calls but never writes/edits
     // any files — i.e. pure read/analysis loops with no code output.
-    const CODE_WRITING_TOOLS = new Set([
-      'write_file',
-      'edit',
-      'run_shell_command', // shell can write files (make, gcc, etc.)
+    const CODE_WRITING_TOOLS = new Set<string>([
+      ToolNames.WRITE_FILE,
+      ToolNames.EDIT,
+      ToolNames.SHELL, // shell can write files (make, gcc, etc.)
     ]);
     const ANALYSIS_LOOP_THRESHOLD = 8; // turns without any file-write tool
     let turnsWithoutCodeWrite = 0;
