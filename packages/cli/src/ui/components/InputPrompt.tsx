@@ -432,7 +432,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         const imagePath = rawPath
           .replace(/\\(.)/g, '$1')
           .replace(/^['"]|['"]$/g, '');
-        const { existsSync } = await import('node:fs');
+        const { existsSync, copyFileSync, mkdirSync } = await import('node:fs');
 
         if (!existsSync(imagePath)) {
           // Check if we're in an SSH session — likely cause of missing file
@@ -455,10 +455,20 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           // Either way, don't attach — file isn't readable
           return;
         }
+
+        // Copy to a stable temp dir immediately — macOS temp screenshots
+        // (e.g. /var/folders/.../TemporaryItems/NSIRD_screencaptureui_*/) are
+        // deleted within seconds of capture. Reading at submit time is too late.
+        const stableDir = Storage.getGlobalTempDir();
+        mkdirSync(stableDir, { recursive: true });
+        const ext = path.extname(imagePath);
+        const stablePath = path.join(stableDir, `dropped-${Date.now()}${ext}`);
+        copyFileSync(imagePath, stablePath);
+
         const filename = path.basename(imagePath);
         const newAttachment: Attachment = {
           id: String(Date.now()),
-          path: imagePath,
+          path: stablePath,
           filename,
         };
         setAttachments((prev) => [...prev, newAttachment]);
