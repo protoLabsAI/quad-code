@@ -51,6 +51,8 @@ export * from './output/types.js';
 // Core Engine
 // ============================================================================
 
+export * from './core/agentCore.js';
+export * from './core/checkpointStore.js';
 export * from './core/client.js';
 export * from './core/contentGenerator.js';
 export * from './core/coreToolScheduler.js';

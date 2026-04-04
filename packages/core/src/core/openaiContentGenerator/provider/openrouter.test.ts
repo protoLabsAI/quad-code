@@ -142,7 +142,7 @@ describe('OpenRouterOpenAICompatibleProvider', () => {
       expect(headers['HTTP-Referer']).toBe(
         'https://github.com/QwenLM/qwen-code.git',
       );
-      expect(headers['X-OpenRouter-Title']).toBe('Qwen Code');
+      expect(headers['X-OpenRouter-Title']).toBe('proto');
     });
   });
 
@@ -215,7 +215,7 @@ describe('OpenRouterOpenAICompatibleProvider', () => {
       expect(headers['HTTP-Referer']).toBe(
         'https://github.com/QwenLM/qwen-code.git',
       ); // OpenRouter-specific
-      expect(headers['X-OpenRouter-Title']).toBe('Qwen Code'); // OpenRouter-specific
+      expect(headers['X-OpenRouter-Title']).toBe('proto'); // OpenRouter-specific
     });
   });
 });

@@ -64,6 +64,7 @@ import { AgentTool } from '../../tools/agent.js';
 import { ToolNames } from '../../tools/tool-names.js';
 import { DEFAULT_QWEN_MODEL } from '../../config/models.js';
 import { type ContextState, templateString } from './agent-headless.js';
+import { beginTurn, snapshotFileBeforeEdit } from '../../core/agentCore.js';
 
 /**
  * Result of a single reasoning loop invocation.
@@ -449,6 +450,19 @@ export class AgentCore {
       // ───────────────────────────────────────────────────────
 
       const promptId = `${this.runtimeContext.getSessionId()}#${this.subagentId}#${turnCounter++}`;
+
+      // ── Checkpoint: record a snapshot at the start of this turn ──────────
+      // Extract the user prompt text from the first message's parts so the
+      // checkpoint store can associate it with the promptId.  We only look
+      // at the first text part; tool-response messages are multi-part but
+      // we only need a human-readable label here.
+      const userPromptText =
+        currentMessages
+          .flatMap((m) => m.parts ?? [])
+          .find((p) => typeof (p as { text?: string }).text === 'string')
+          ?.text ?? '';
+      beginTurn(promptId, userPromptText);
+      // ─────────────────────────────────────────────────────────────────────
 
       const messageParams = {
         message: currentMessages[0]?.parts || [],
@@ -976,6 +990,12 @@ export class AgentCore {
         isOutputMarkdown,
         timestamp: Date.now(),
       } as AgentToolCallEvent);
+
+      // ── Checkpoint: snapshot file content before any mutating tool ───────
+      // This is a no-op for non-file-mutating tools and adds no latency
+      // when no files are modified in a turn.
+      snapshotFileBeforeEdit(promptId, toolName, args);
+      // ─────────────────────────────────────────────────────────────────────
 
       // pre-tool hook
       void this.hooks?.preToolUse?.({
