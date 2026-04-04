@@ -40,7 +40,8 @@ import { ExtensionsManagerDialog } from './extensions/ExtensionsManagerDialog.js
 import { MCPManagementDialog } from './mcp/MCPManagementDialog.js';
 import { HooksManagementDialog } from './hooks/HooksManagementDialog.js';
 import { SessionPicker } from './SessionPicker.js';
-import { RewindDialog } from './RewindDialog.js';
+import { RewindPicker } from './RewindPicker.js';
+import { checkpointStore } from '@qwen-code/qwen-code-core';
 
 interface DialogManagerProps {
   addItem: UseHistoryManagerReturn['addItem'];
@@ -352,56 +353,144 @@ export const DialogManager = ({
   }
 
   if (uiState.isRewindDialogOpen) {
-    return (
-      <RewindDialog
-        history={uiState.history}
-        onConfirm={(historyIndex) => {
-          // Slice UI history to the selected index (exclusive)
-          const slicedUiHistory = uiState.history.slice(0, historyIndex);
-          uiState.historyManager.loadHistory(slicedUiHistory);
+    /**
+     * Compute the UI history cut index for a given checkpoint promptId.
+     * Slices the UI history to BEFORE the user turn that corresponds to
+     * the selected checkpoint (i.e., rewind to the state before that turn).
+     */
+    const getUiHistoryCutIndex = (promptId: string): number => {
+      const allCheckpoints = checkpointStore.list(); // chronological order
+      const cpIndex = allCheckpoints.findIndex(
+        (cp) => cp.promptId === promptId,
+      );
+      if (cpIndex < 0) return uiState.history.length; // not found — keep all
 
-          // Count how many user turns are in the sliced UI history,
-          // then cut the LLM history at the same relative position.
-          const geminiClient = config?.getGeminiClient?.();
-          if (geminiClient) {
-            const userTurnCount = slicedUiHistory.filter(
-              (item) => item.type === 'user',
-            ).length;
-            const llmHistory = geminiClient.getHistory();
-            let usersSeen = 0;
-            let llmCutIdx = 0;
-            for (let i = 0; i < llmHistory.length; i++) {
-              if (llmHistory[i].role === 'user') {
-                usersSeen++;
-                if (usersSeen > userTurnCount) {
-                  llmCutIdx = i;
-                  break;
-                }
-                llmCutIdx = i + 1;
-              }
-            }
-            const newLlmHistory =
-              userTurnCount === 0 ? [] : llmHistory.slice(0, llmCutIdx);
-            geminiClient.setHistory(newLlmHistory);
+      // Find the cpIndex-th user item in UI history (0-based).
+      // The cut is BEFORE that item (exclusive).
+      let usersSeen = 0;
+      for (let i = 0; i < uiState.history.length; i++) {
+        if (uiState.history[i].type === 'user') {
+          if (usersSeen === cpIndex) {
+            return i; // slice(0, i) keeps everything before this turn
           }
+          usersSeen++;
+        }
+      }
+      return uiState.history.length;
+    };
 
-          uiActions.closeRewindDialog();
+    /** Apply a conversation rewind: slice UI history and LLM history. */
+    const applyConversationRewind = (
+      promptId: string,
+    ): { slicedUiHistory: typeof uiState.history; originalPrompt: string } => {
+      const cutIdx = getUiHistoryCutIndex(promptId);
+      const slicedUiHistory = uiState.history.slice(0, cutIdx);
+      uiState.historyManager.loadHistory(slicedUiHistory);
 
-          // Count user turns in sliced history for the info message
-          const turnNumber = uiState.history
-            .slice(0, historyIndex)
-            .filter((item) => item.type === 'user').length;
-          addItem(
-            {
-              type: 'info',
-              text:
-                turnNumber === 0
-                  ? 'Rewound to the beginning of the conversation.'
-                  : `Rewound to turn ${turnNumber}.`,
-            },
-            Date.now(),
-          );
-        }}
+      // Slice the LLM history to match the number of user turns kept.
+      const geminiClient = config?.getGeminiClient?.();
+      if (geminiClient) {
+        const userTurnCount = slicedUiHistory.filter(
+          (item) => item.type === 'user',
+        ).length;
+        const llmHistory = geminiClient.getHistory();
+        let usersSeen = 0;
+        let llmCutIdx = 0;
+        for (let i = 0; i < llmHistory.length; i++) {
+          if (llmHistory[i].role === 'user') {
+            usersSeen++;
+            if (usersSeen > userTurnCount) {
+              llmCutIdx = i;
+              break;
+            }
+            llmCutIdx = i + 1;
+          }
+        }
+        geminiClient.setHistory(
+          userTurnCount === 0 ? [] : llmHistory.slice(0, llmCutIdx),
+        );
+      }
+
+      // Get the original prompt text from the checkpoint for pre-filling.
+      const checkpoint = checkpointStore.getByPromptId(promptId);
+      const originalPrompt = checkpoint?.userPrompt ?? '';
+      return { slicedUiHistory, originalPrompt };
+    };
+
+    const handleRestoreFilesAndConversation = (promptId: string) => {
+      // 1. Restore files to pre-turn state
+      try {
+        checkpointStore.rewindToCheckpoint(promptId);
+      } catch {
+        // checkpoint may have no file snapshots — safe to ignore
+      }
+      // 2. Restore conversation (LLM history + UI history)
+      const { slicedUiHistory, originalPrompt } =
+        applyConversationRewind(promptId);
+      uiActions.closeRewindDialog();
+      // 3. Pre-fill original prompt text
+      if (originalPrompt) {
+        uiState.buffer.setText(originalPrompt);
+      }
+      const turnNumber = slicedUiHistory.filter(
+        (item) => item.type === 'user',
+      ).length;
+      addItem(
+        {
+          type: 'info',
+          text:
+            turnNumber === 0
+              ? 'Rewound to the beginning (files + conversation restored).'
+              : `Rewound to turn ${turnNumber} (files + conversation restored).`,
+        },
+        Date.now(),
+      );
+    };
+
+    const handleRestoreConversationOnly = (promptId: string) => {
+      const { slicedUiHistory, originalPrompt } =
+        applyConversationRewind(promptId);
+      uiActions.closeRewindDialog();
+      // Pre-fill original prompt text
+      if (originalPrompt) {
+        uiState.buffer.setText(originalPrompt);
+      }
+      const turnNumber = slicedUiHistory.filter(
+        (item) => item.type === 'user',
+      ).length;
+      addItem(
+        {
+          type: 'info',
+          text:
+            turnNumber === 0
+              ? 'Rewound to the beginning (conversation restored).'
+              : `Rewound to turn ${turnNumber} (conversation restored).`,
+        },
+        Date.now(),
+      );
+    };
+
+    const handleRestoreFilesOnly = (promptId: string) => {
+      try {
+        checkpointStore.rewindToCheckpoint(promptId);
+      } catch {
+        // checkpoint may have no file snapshots — safe to ignore
+      }
+      uiActions.closeRewindDialog();
+      addItem(
+        {
+          type: 'info',
+          text: 'Files restored to checkpoint state (conversation unchanged).',
+        },
+        Date.now(),
+      );
+    };
+
+    return (
+      <RewindPicker
+        onRestoreFilesAndConversation={handleRestoreFilesAndConversation}
+        onRestoreConversationOnly={handleRestoreConversationOnly}
+        onRestoreFilesOnly={handleRestoreFilesOnly}
         onCancel={uiActions.closeRewindDialog}
       />
     );
