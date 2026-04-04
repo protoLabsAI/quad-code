@@ -130,7 +130,6 @@ describe('Session', () => {
       expect(mockConfig.switchModel).toHaveBeenCalledWith(
         AuthType.USE_OPENAI,
         'qwen3-coder-plus',
-        undefined,
       );
     });
 

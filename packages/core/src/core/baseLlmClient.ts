@@ -17,10 +17,8 @@ import type { Config } from '../config/config.js';
 import type { ContentGenerator } from './contentGenerator.js';
 import { reportError } from '../utils/errorReporting.js';
 import { getErrorMessage } from '../utils/errors.js';
-import { retryWithBackoff } from '../utils/retry.js';
+import { retryWithBackoff, DEFAULT_MAX_ATTEMPTS } from '../utils/retry.js';
 import { getFunctionCalls } from '../utils/generateContentResponseUtilities.js';
-
-const DEFAULT_MAX_ATTEMPTS = 7;
 
 /**
  * Options for the generateJson utility function.

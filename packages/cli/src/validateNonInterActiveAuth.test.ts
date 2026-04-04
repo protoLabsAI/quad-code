@@ -313,7 +313,7 @@ describe('validateNonInterActiveAuth', () => {
         getOutputFormat: vi.fn().mockReturnValue(OutputFormat.JSON),
         getModelsConfig: vi.fn().mockReturnValue({
           getModel: vi.fn().mockReturnValue('default-model'),
-          getCurrentAuthType: vi.fn().mockReturnValue(AuthType.QWEN_OAUTH),
+          getCurrentAuthType: vi.fn().mockReturnValue(AuthType.ANTHROPIC),
         }),
       });
 
@@ -342,7 +342,7 @@ describe('validateNonInterActiveAuth', () => {
     });
 
     it('emits error result and exits when enforced auth mismatches current auth', async () => {
-      mockSettings.merged.security!.auth!.enforcedType = AuthType.QWEN_OAUTH;
+      mockSettings.merged.security!.auth!.enforcedType = AuthType.ANTHROPIC;
       process.env['OPENAI_API_KEY'] = 'fake-key';
 
       const nonInteractiveConfig = createMockConfig({
@@ -368,7 +368,7 @@ describe('validateNonInterActiveAuth', () => {
       expect(emitResultMock).toHaveBeenCalledWith({
         isError: true,
         errorMessage: expect.stringContaining(
-          'The configured auth type is qwen-oauth, but the current auth type is openai.',
+          'The configured auth type is anthropic, but the current auth type is openai.',
         ),
         durationMs: 0,
         apiDurationMs: 0,
@@ -449,7 +449,7 @@ describe('validateNonInterActiveAuth', () => {
         getIncludePartialMessages: vi.fn().mockReturnValue(false),
         getModelsConfig: vi.fn().mockReturnValue({
           getModel: vi.fn().mockReturnValue('default-model'),
-          getCurrentAuthType: vi.fn().mockReturnValue(AuthType.QWEN_OAUTH),
+          getCurrentAuthType: vi.fn().mockReturnValue(AuthType.ANTHROPIC),
         }),
       });
 
@@ -478,7 +478,7 @@ describe('validateNonInterActiveAuth', () => {
     });
 
     it('emits error result and exits when enforced auth mismatches current auth', async () => {
-      mockSettings.merged.security!.auth!.enforcedType = AuthType.QWEN_OAUTH;
+      mockSettings.merged.security!.auth!.enforcedType = AuthType.ANTHROPIC;
       process.env['OPENAI_API_KEY'] = 'fake-key';
 
       const nonInteractiveConfig = createMockConfig({
@@ -505,7 +505,7 @@ describe('validateNonInterActiveAuth', () => {
       expect(emitResultMock).toHaveBeenCalledWith({
         isError: true,
         errorMessage: expect.stringContaining(
-          'The configured auth type is qwen-oauth, but the current auth type is openai.',
+          'The configured auth type is anthropic, but the current auth type is openai.',
         ),
         durationMs: 0,
         apiDurationMs: 0,

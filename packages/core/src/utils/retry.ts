@@ -22,7 +22,7 @@ export interface RetryOptions {
   shouldRetryOnContent?: (content: GenerateContentResponse) => boolean;
 }
 
-const DEFAULT_MAX_ATTEMPTS = (() => {
+export const DEFAULT_MAX_ATTEMPTS = (() => {
   const env = process.env['PROTO_MAX_RETRIES'];
   if (env) {
     const parsed = parseInt(env, 10);
