@@ -313,7 +313,7 @@ describe('validateNonInterActiveAuth', () => {
         getOutputFormat: vi.fn().mockReturnValue(OutputFormat.JSON),
         getModelsConfig: vi.fn().mockReturnValue({
           getModel: vi.fn().mockReturnValue('default-model'),
-          getCurrentAuthType: vi.fn().mockReturnValue(AuthType.ANTHROPIC),
+          getCurrentAuthType: vi.fn().mockReturnValue(AuthType.USE_ANTHROPIC),
         }),
       });
 
@@ -342,7 +342,7 @@ describe('validateNonInterActiveAuth', () => {
     });
 
     it('emits error result and exits when enforced auth mismatches current auth', async () => {
-      mockSettings.merged.security!.auth!.enforcedType = AuthType.ANTHROPIC;
+      mockSettings.merged.security!.auth!.enforcedType = AuthType.USE_ANTHROPIC;
       process.env['OPENAI_API_KEY'] = 'fake-key';
 
       const nonInteractiveConfig = createMockConfig({
@@ -449,7 +449,7 @@ describe('validateNonInterActiveAuth', () => {
         getIncludePartialMessages: vi.fn().mockReturnValue(false),
         getModelsConfig: vi.fn().mockReturnValue({
           getModel: vi.fn().mockReturnValue('default-model'),
-          getCurrentAuthType: vi.fn().mockReturnValue(AuthType.ANTHROPIC),
+          getCurrentAuthType: vi.fn().mockReturnValue(AuthType.USE_ANTHROPIC),
         }),
       });
 
@@ -478,7 +478,7 @@ describe('validateNonInterActiveAuth', () => {
     });
 
     it('emits error result and exits when enforced auth mismatches current auth', async () => {
-      mockSettings.merged.security!.auth!.enforcedType = AuthType.ANTHROPIC;
+      mockSettings.merged.security!.auth!.enforcedType = AuthType.USE_ANTHROPIC;
       process.env['OPENAI_API_KEY'] = 'fake-key';
 
       const nonInteractiveConfig = createMockConfig({

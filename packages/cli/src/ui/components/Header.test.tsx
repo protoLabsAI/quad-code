@@ -43,7 +43,7 @@ describe('<Header />', () => {
 
   it('displays auth type and model', () => {
     const { lastFrame } = render(<Header {...defaultProps} />);
-    expect(lastFrame()).toContain('Qwen OAuth');
+    expect(lastFrame()).toContain('API Key');
     expect(lastFrame()).toContain('qwen-coder-plus');
   });
 

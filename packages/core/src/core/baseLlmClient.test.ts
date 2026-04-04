@@ -39,6 +39,7 @@ vi.mock('../utils/generateContentResponseUtilities.js', () => ({
 
 vi.mock('../utils/retry.js', () => ({
   retryWithBackoff: vi.fn(async (fn) => await fn()),
+  DEFAULT_MAX_ATTEMPTS: 7,
 }));
 
 const mockGenerateContent = vi.fn();
