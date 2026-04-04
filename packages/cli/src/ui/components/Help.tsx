@@ -154,6 +154,12 @@ export const Help: React.FC<Help> = ({ commands, width }) => (
     </Text>
     <Text color={theme.text.primary}>
       <Text bold color={theme.text.accent}>
+        Esc×2
+      </Text>{' '}
+      - {t('Open rewind dialog (when input is empty)')}
+    </Text>
+    <Text color={theme.text.primary}>
+      <Text bold color={theme.text.accent}>
         {process.platform === 'win32' ? 'Tab' : 'Shift+Tab'}
       </Text>{' '}
       - {t('Cycle approval modes')}

@@ -10,6 +10,7 @@ import { theme } from '../semantic-colors.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import type { HistoryItem } from '../types.js';
+import { ToolNames } from '@qwen-code/qwen-code-core';
 
 export interface RewindDialogProps {
   history: HistoryItem[];
@@ -19,21 +20,42 @@ export interface RewindDialogProps {
 
 /**
  * Extract user turns from the full history, preserving their original indices.
+ * Also detects whether each turn triggered bash (shell) tool calls, which
+ * cannot be undone by rewind.
  */
 function extractUserTurns(
   history: HistoryItem[],
-): Array<{ historyIndex: number; text: string; turnNumber: number }> {
+): Array<{
+  historyIndex: number;
+  text: string;
+  turnNumber: number;
+  hasBashCalls: boolean;
+}> {
   const turns: Array<{
     historyIndex: number;
     text: string;
     turnNumber: number;
+    hasBashCalls: boolean;
   }> = [];
   let turnNumber = 0;
   for (let i = 0; i < history.length; i++) {
     const item = history[i];
     if (item.type === 'user') {
       turnNumber++;
-      turns.push({ historyIndex: i, text: item.text ?? '', turnNumber });
+      // Look ahead for bash/shell tool calls until the next user message
+      let hasBashCalls = false;
+      for (let j = i + 1; j < history.length; j++) {
+        const nextItem = history[j];
+        if (nextItem.type === 'user') break;
+        if (
+          nextItem.type === 'tool_group' &&
+          nextItem.tools.some((tool) => tool.name === ToolNames.SHELL)
+        ) {
+          hasBashCalls = true;
+          break;
+        }
+      }
+      turns.push({ historyIndex: i, text: item.text ?? '', turnNumber, hasBashCalls });
     }
   }
   return turns;
@@ -161,6 +183,9 @@ export function RewindDialog({
                   >
                     {truncated}
                   </Text>
+                  {turn.hasBashCalls && (
+                    <Text color={theme.status.warning}> ⚠ bash</Text>
+                  )}
                   <Text color={theme.text.secondary}>{' · '}</Text>
                   <Text color={theme.text.secondary}>{label}</Text>
                 </Box>
@@ -175,9 +200,12 @@ export function RewindDialog({
         </Box>
 
         {/* Footer */}
-        <Box paddingX={1}>
+        <Box paddingX={1} flexDirection="column">
           <Text color={theme.text.secondary}>
             ↑↓ to navigate · Enter to rewind here · Esc to cancel
+          </Text>
+          <Text color={theme.status.warning}>
+            ⚠ bash: shell changes cannot be rewound
           </Text>
         </Box>
       </Box>

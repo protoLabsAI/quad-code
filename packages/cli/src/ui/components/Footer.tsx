@@ -73,7 +73,11 @@ export const Footer: React.FC = () => {
       showAutoAcceptIndicator !== ApprovalMode.DEFAULT ? (
       <AutoAcceptIndicator approvalMode={showAutoAcceptIndicator} />
     ) : (
-      <Text color={theme.text.secondary}>{t('? for shortcuts')}</Text>
+      <Text color={theme.text.secondary}>
+        {t('? for shortcuts')}
+        {'  ·  '}
+        {t('Esc×2: rewind')}
+      </Text>
     );
 
   const rightItems: Array<{ key: string; node: React.ReactNode }> = [
