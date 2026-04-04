@@ -78,6 +78,9 @@ import { flatMapTextParts } from '../utils/partUtils.js';
 import { promptIdContext } from '../utils/promptIdContext.js';
 import { retryWithBackoff } from '../utils/retry.js';
 
+// Checkpoint store for rewind support
+import { checkpointStore } from './agentCore.js';
+
 // Hook types and utilities
 import {
   MessageBusType,
@@ -134,6 +137,13 @@ export class GeminiClient {
    */
   private verificationAttempts = 0;
   private static readonly MAX_VERIFICATION_ATTEMPTS = 3;
+
+  /**
+   * Maps promptId → history length captured just before the user message for
+   * that turn is added. Used by trimHistoryToCheckpoint() to restore history
+   * to the pre-turn state so the user prompt can be re-filled.
+   */
+  private readonly turnHistoryLengths = new Map<string, number>();
 
   constructor(private readonly config: Config) {
     this.loopDetector = new LoopDetectionService(config);
@@ -194,6 +204,45 @@ export class GeminiClient {
   setHistory(history: Content[]) {
     this.getChat().setHistory(history);
     this.forceFullIdeContext = true;
+  }
+
+  /**
+   * Trims the chat history back to the state it was in just before the turn
+   * identified by `promptId` was sent to the model.
+   *
+   * This is the UI-layer counterpart to CheckpointStore.rewindToCheckpoint():
+   * that method reverts files on disk, while this method rewinds the in-memory
+   * message array.  The two operations are intentionally independent.
+   *
+   * @param promptId - The stable turn identifier used when the checkpoint was
+   *   created (same value that was passed to CheckpointStore.add()).
+   * @returns The original user prompt text for that turn, so the caller can
+   *   pre-fill the input field.
+   * @throws {Error} if no checkpoint or history snapshot exists for `promptId`.
+   */
+  trimHistoryToCheckpoint(promptId: string): string {
+    const checkpoint = checkpointStore.getByPromptId(promptId);
+    if (!checkpoint) {
+      throw new Error(
+        `trimHistoryToCheckpoint: no checkpoint found for promptId "${promptId}"`,
+      );
+    }
+
+    const historyLength = this.turnHistoryLengths.get(promptId);
+    if (historyLength === undefined) {
+      throw new Error(
+        `trimHistoryToCheckpoint: no history snapshot found for promptId "${promptId}". ` +
+          'Ensure the turn was sent via sendMessageStream before calling this method.',
+      );
+    }
+
+    const currentHistory = this.getHistory();
+    // Slice removes everything from this turn's user message onwards
+    // (IDE context injection, the user prompt, model response, tool calls, and
+    // all subsequent turns).
+    this.setHistory(currentHistory.slice(0, historyLength));
+
+    return checkpoint.userPrompt;
   }
 
   setTools(): void {
@@ -559,6 +608,12 @@ export class GeminiClient {
 
       // strip thoughts from history before sending the message
       this.stripThoughtsFromHistory();
+
+      // Capture history length for rewind support.
+      // This snapshot is taken after thought-stripping but before IDE context
+      // injection and before the user message is appended, so
+      // trimHistoryToCheckpoint() can restore the history to this exact state.
+      this.turnHistoryLengths.set(prompt_id, this.getHistory().length);
     }
     if (messageType !== SendMessageType.Retry) {
       this.sessionTurnCount++;

@@ -2701,4 +2701,128 @@ Other open files:
     // Note: there is currently no "fallback mode" model routing; the model used
     // is always the one explicitly requested by the caller.
   });
+
+  describe('trimHistoryToCheckpoint', () => {
+    beforeEach(async () => {
+      // Reset the singleton checkpointStore before each test by clearing all
+      // internal state via re-importing. We do this by reaching into the store
+      // directly using the exported reference from agentCore.
+      const { checkpointStore } = await import('./agentCore.js');
+      // Clear internal state (checkpoints array and index map) via type cast
+      (
+        checkpointStore as unknown as {
+          checkpoints: unknown[];
+          index: Map<unknown, unknown>;
+        }
+      ).checkpoints.length = 0;
+      (
+        checkpointStore as unknown as {
+          checkpoints: unknown[];
+          index: Map<unknown, unknown>;
+        }
+      ).index.clear();
+    });
+
+    it('throws when no checkpoint exists for the given promptId', () => {
+      expect(() => client.trimHistoryToCheckpoint('nonexistent-id')).toThrow(
+        'no checkpoint found for promptId "nonexistent-id"',
+      );
+    });
+
+    it('throws when a checkpoint exists but no history snapshot was recorded', async () => {
+      const { checkpointStore } = await import('./agentCore.js');
+      checkpointStore.add('turn-1', 'Hello world');
+
+      // trimHistoryToCheckpoint requires that sendMessageStream was called for
+      // that promptId (so that a history length was captured). Without that,
+      // the snapshot map won't have an entry.
+      expect(() => client.trimHistoryToCheckpoint('turn-1')).toThrow(
+        'no history snapshot found for promptId "turn-1"',
+      );
+    });
+
+    it('returns the original user prompt text', async () => {
+      const { checkpointStore } = await import('./agentCore.js');
+      checkpointStore.add('turn-1', 'My original prompt');
+
+      // Manually inject a history length snapshot to simulate what
+      // sendMessageStream would do.
+      (client as unknown as { turnHistoryLengths: Map<string, number> }).turnHistoryLengths.set(
+        'turn-1',
+        2, // 2 = the initial history set up in the beforeEach mock
+      );
+
+      const result = client.trimHistoryToCheckpoint('turn-1');
+      expect(result).toBe('My original prompt');
+    });
+
+    it('slices the chat history back to the length at checkpoint time', async () => {
+      const { checkpointStore } = await import('./agentCore.js');
+
+      // Simulate the history at checkpoint creation: 2 initial entries
+      const snapshotLength = client.getHistory().length; // after initialize()
+      checkpointStore.add('turn-1', 'First prompt');
+      (client as unknown as { turnHistoryLengths: Map<string, number> }).turnHistoryLengths.set(
+        'turn-1',
+        snapshotLength,
+      );
+
+      // Add extra messages to simulate what happened after the turn ran
+      await client.addHistory({ role: 'user', parts: [{ text: 'First prompt' }] });
+      await client.addHistory({ role: 'model', parts: [{ text: 'Response' }] });
+      await client.addHistory({ role: 'user', parts: [{ text: 'Second prompt' }] });
+
+      expect(client.getHistory().length).toBe(snapshotLength + 3);
+
+      client.trimHistoryToCheckpoint('turn-1');
+
+      expect(client.getHistory().length).toBe(snapshotLength);
+    });
+
+    it('works correctly when the selected checkpoint is the first turn', async () => {
+      const { checkpointStore } = await import('./agentCore.js');
+
+      // Snapshot at 0 — no initial history (simulate empty slate)
+      const mockChat = {
+        getHistory: vi.fn().mockReturnValue([]),
+        setHistory: vi.fn(),
+        addHistory: vi.fn(),
+        setTools: vi.fn(),
+        stripThoughtsFromHistory: vi.fn(),
+        stripOrphanedUserEntriesFromHistory: vi.fn(),
+      } as unknown as GeminiChat;
+      client['chat'] = mockChat;
+
+      checkpointStore.add('first-turn', 'Very first message');
+      (client as unknown as { turnHistoryLengths: Map<string, number> }).turnHistoryLengths.set(
+        'first-turn',
+        0,
+      );
+
+      const result = client.trimHistoryToCheckpoint('first-turn');
+
+      expect(result).toBe('Very first message');
+      expect(mockChat.setHistory).toHaveBeenCalledWith([]);
+    });
+
+    it('does not modify the CheckpointStore', async () => {
+      const { checkpointStore } = await import('./agentCore.js');
+
+      checkpointStore.add('turn-1', 'Some prompt');
+      checkpointStore.add('turn-2', 'Another prompt');
+
+      (client as unknown as { turnHistoryLengths: Map<string, number> }).turnHistoryLengths.set(
+        'turn-1',
+        0,
+      );
+
+      const sizeBefore = checkpointStore.size;
+      client.trimHistoryToCheckpoint('turn-1');
+      const sizeAfter = checkpointStore.size;
+
+      expect(sizeAfter).toBe(sizeBefore);
+      expect(checkpointStore.getByPromptId('turn-1')).toBeDefined();
+      expect(checkpointStore.getByPromptId('turn-2')).toBeDefined();
+    });
+  });
 });
