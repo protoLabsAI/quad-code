@@ -270,6 +270,11 @@ export class GitWorktreeService {
         createdAt: Date.now(),
       };
 
+      // Configure gh CLI so that `gh pr create` works inside the worktree.
+      // Without this, gh doesn't know which repo to target and fails with
+      // "No default remote repository has been set."
+      await this.configureGhRepoDefault(worktreePath);
+
       return { success: true, worktree };
     } catch (error) {
       return {
@@ -803,6 +808,45 @@ export class GitWorktreeService {
       } catch {
         // Best-effort: ignore reset failures
       }
+    }
+  }
+
+  /**
+   * Runs `gh repo set-default` in the given worktree so that `gh pr create`
+   * works without manual intervention. Resolves the repo from the origin remote.
+   * Failures are non-fatal — the worktree is still usable without this.
+   */
+  private async configureGhRepoDefault(worktreePath: string): Promise<void> {
+    try {
+      const { available: ghAvailable } = isCommandAvailable('gh');
+      if (!ghAvailable) {
+        return;
+      }
+
+      // Resolve origin URL from the source repo
+      const remoteResult = await this.git.remote(['get-url', 'origin']);
+      const originUrl = (remoteResult ?? '').trim();
+      if (!originUrl) {
+        return;
+      }
+
+      // Extract owner/repo from SSH or HTTPS remote URLs:
+      // git@github.com:owner/repo.git  →  owner/repo
+      // https://github.com/owner/repo.git  →  owner/repo
+      const match = originUrl.match(
+        /(?:github\.com[:/])([^/]+\/[^/]+?)(?:\.git)?$/,
+      );
+      if (!match) {
+        return;
+      }
+
+      const ownerRepo = match[1];
+      execSync(`gh repo set-default ${ownerRepo}`, {
+        cwd: worktreePath,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } catch {
+      // Non-fatal: gh may not be installed or remote may not be on GitHub
     }
   }
 
