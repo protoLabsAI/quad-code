@@ -22,6 +22,8 @@ export interface RewindPickerProps {
   onRestoreConversationOnly: (promptId: string) => void;
   /** Called when the user chooses "Restore files only" */
   onRestoreFilesOnly: (promptId: string) => void;
+  /** Called when the user chooses "Summarize from here" */
+  onSummarizeFromHere: (promptId: string) => void;
   /** Called when the user cancels (Esc or "Cancel" action) */
   onCancel: () => void;
 }
@@ -35,6 +37,7 @@ const ACTION_ITEMS = [
   { label: 'Restore files + conversation', key: 'files_and_conversation' },
   { label: 'Restore conversation only', key: 'conversation_only' },
   { label: 'Restore files only', key: 'files_only' },
+  { label: 'Summarize from here', key: 'summarize_from_here' },
   { label: 'Cancel', key: 'cancel' },
 ] as const;
 
@@ -67,12 +70,16 @@ export function RewindPicker({
   onRestoreFilesAndConversation,
   onRestoreConversationOnly,
   onRestoreFilesOnly,
+  onSummarizeFromHere,
   onCancel,
 }: RewindPickerProps) {
   const { columns: width, rows: height } = useTerminalSize();
 
   // All checkpoints in reverse chronological order (most-recent first).
-  const checkpoints: Checkpoint[] = useMemo(() => checkpointStore.list().slice().reverse(), []);
+  const checkpoints: Checkpoint[] = useMemo(
+    () => checkpointStore.list().slice().reverse(),
+    [],
+  );
 
   const [phase, setPhase] = useState<Phase>('pick');
   const [selectedCheckpointIdx, setSelectedCheckpointIdx] = useState(0);
@@ -158,6 +165,9 @@ export function RewindPicker({
           case 'files_only':
             onRestoreFilesOnly(selectedCheckpoint.promptId);
             break;
+          case 'summarize_from_here':
+            onSummarizeFromHere(selectedCheckpoint.promptId);
+            break;
           case 'cancel':
             onCancel();
             break;
@@ -182,6 +192,7 @@ export function RewindPicker({
       onRestoreFilesAndConversation,
       onRestoreConversationOnly,
       onRestoreFilesOnly,
+      onSummarizeFromHere,
       checkpoints,
       selectedCheckpointIdx,
       selectedActionIdx,

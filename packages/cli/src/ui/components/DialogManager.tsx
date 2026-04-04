@@ -41,7 +41,7 @@ import { MCPManagementDialog } from './mcp/MCPManagementDialog.js';
 import { HooksManagementDialog } from './hooks/HooksManagementDialog.js';
 import { SessionPicker } from './SessionPicker.js';
 import { RewindPicker } from './RewindPicker.js';
-import { checkpointStore } from '@qwen-code/qwen-code-core';
+import { checkpointStore, CompressionStatus } from '@qwen-code/qwen-code-core';
 
 interface DialogManagerProps {
   addItem: UseHistoryManagerReturn['addItem'];
@@ -486,11 +486,69 @@ export const DialogManager = ({
       );
     };
 
+    const handleSummarizeFromHere = async (promptId: string) => {
+      // 1. Rewind conversation to the selected checkpoint
+      const { slicedUiHistory } = applyConversationRewind(promptId);
+      uiActions.closeRewindDialog();
+
+      const turnNumber = slicedUiHistory.filter(
+        (item) => item.type === 'user',
+      ).length;
+
+      // 2. Compress the remaining history
+      const geminiClient = config?.getGeminiClient?.();
+      if (!geminiClient) {
+        addItem(
+          { type: 'error', text: 'Cannot summarize: client not available.' },
+          Date.now(),
+        );
+        return;
+      }
+      try {
+        const compressed = await geminiClient.tryCompressChat(
+          `rewind-summarize-${Date.now()}`,
+          true,
+        );
+        if (compressed.compressionStatus === CompressionStatus.COMPRESSED) {
+          addItem(
+            {
+              type: 'info',
+              text:
+                turnNumber === 0
+                  ? `Rewound to beginning and summarized (${compressed.originalTokenCount} → ${compressed.newTokenCount} tokens).`
+                  : `Rewound to turn ${turnNumber} and summarized (${compressed.originalTokenCount} → ${compressed.newTokenCount} tokens).`,
+            },
+            Date.now(),
+          );
+        } else {
+          addItem(
+            {
+              type: 'info',
+              text:
+                turnNumber === 0
+                  ? 'Rewound to beginning (summarization skipped — context already short).'
+                  : `Rewound to turn ${turnNumber} (summarization skipped — context already short).`,
+            },
+            Date.now(),
+          );
+        }
+      } catch (err) {
+        addItem(
+          {
+            type: 'error',
+            text: `Rewound but summarization failed: ${err instanceof Error ? err.message : String(err)}`,
+          },
+          Date.now(),
+        );
+      }
+    };
+
     return (
       <RewindPicker
         onRestoreFilesAndConversation={handleRestoreFilesAndConversation}
         onRestoreConversationOnly={handleRestoreConversationOnly}
         onRestoreFilesOnly={handleRestoreFilesOnly}
+        onSummarizeFromHere={handleSummarizeFromHere}
         onCancel={uiActions.closeRewindDialog}
       />
     );
