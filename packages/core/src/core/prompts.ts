@@ -521,19 +521,7 @@ Produce a condensed summary of the entire conversation for seamless continuation
 
 ESSENTIAL: Reply with PLAIN TEXT ONLY. Do NOT invoke any tools. Tool invocations will be BLOCKED.
 Everything you need is already present in the conversation above.
-Output must be: one <analysis> block followed by one <summary> block.
-
-## Analysis Phase
-
-Before writing the summary, wrap your reasoning inside <analysis> tags:
-- Walk through each message chronologically
-- Identify what the user asked for and their underlying intent
-- Note the strategy or approach adopted
-- Record pivotal decisions and trade-offs
-- Capture technical concepts and patterns discussed
-- Extract concrete details: file paths, complete code fragments, function signatures, file modifications
-- Document errors encountered and how they were resolved
-- Note any user feedback or corrections
+Output must be a single <summary> block. Be maximally concise — every token counts.
 
 ## Summary Sections
 
@@ -543,21 +531,21 @@ The <summary> block must contain exactly these ten sections:
 
 2. **Key Technical Concepts** — Frameworks, patterns, algorithms, architectures, or domain knowledge involved. Include build commands, test commands, and environment details.
 
-3. **Files and Code Sections** — Enumerate every relevant file by absolute path. Include complete code snippets for anything non-trivial. Note status: CREATED, MODIFIED, READ, DELETED. Explain why each matters. For files that were read multiple times, keep only the most recent read — deduplicate by path.
+3. **Files and Code Sections** — Enumerate every relevant file by absolute path. Note status: CREATED, MODIFIED, READ, DELETED. For non-trivial changes, describe what changed and why — do NOT reproduce full file contents or long code listings. Only include short, critical snippets (< 20 lines) where the exact code is essential for resumption.
 
 4. **Errors and Fixes** — Every error that surfaced, the exact error message, how it was resolved, and any user reactions or corrections. This section prevents the agent from retrying failed approaches.
 
 5. **Problem Solving** — Reasoning chains, alternative approaches considered and why they were rejected, debugging strategies applied. This section preserves eliminated dead ends.
 
-6. **All User Messages** — List ALL non-tool-result messages from the user, preserving their substance verbatim. Do not paraphrase — the user's exact words carry intent that summaries lose.
+6. **All User Messages** — Summarize the intent and substance of each user message concisely. Preserve exact wording only for short, critical instructions — do not reproduce long messages verbatim.
 
 7. **Current Todo List** — List EVERY todo item with its exact current status: added | in_progress | completed | cancelled. Do not omit any item. This is critical for resuming work without re-planning completed tasks.
 
 8. **Pending Tasks** — Work that remains unfinished or was explicitly deferred. Include any promises made to the user.
 
-9. **Current Work** — Precise description of what was actively being worked on at conversation end, with file names, line numbers, and code fragments. This is the most critical section for seamless resumption.
+9. **Current Work** — Precise description of what was actively being worked on at conversation end, with file names and line numbers. This is the most critical section for seamless resumption.
 
-10. **Optional Next Step** — MUST align directly with the user's most recent explicit requests. Include direct quotes showing which task was underway. Do not invent next steps the user did not ask for.
+10. **Optional Next Step** — MUST align directly with the user's most recent explicit requests. Do not invent next steps the user did not ask for.
 
 ## Continuation Behavior
 

@@ -438,7 +438,7 @@ export class ChatCompressionService {
             role: 'user',
             parts: [
               {
-                text: 'First, reason in your scratchpad. Then, generate the <state_snapshot>.',
+                text: 'Generate the <summary> now. Be maximally concise — every token counts.',
               },
             ],
           },
