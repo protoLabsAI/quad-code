@@ -5,10 +5,9 @@
  */
 
 import type React from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
-import { useUIActions } from '../contexts/UIActionsContext.js';
 
 /**
  * Compact voice status button rendered in the Footer right section.
@@ -21,24 +20,10 @@ import { useUIActions } from '../contexts/UIActionsContext.js';
  *   transcribing           → dim  "◌ STT…"
  *   error                  → red  "✗ mic err"
  *
- * Keyboard: ctrl+space (existing shortcut)
- * Focus:    Tab to focus this button, Enter/Space to toggle
+ * Keyboard: ctrl+space (handled in InputPrompt)
  */
 export const VoiceMicButton: React.FC = () => {
   const { voiceEnabled, voiceBackendAvailable, voiceState } = useUIState();
-  const { onVoiceToggle } = useUIActions();
-
-  // Let Enter activate the button when the user uses keyboard focus
-  useInput(
-    (input, key) => {
-      if (key.return || input === ' ') {
-        if (voiceEnabled && voiceBackendAvailable) {
-          onVoiceToggle();
-        }
-      }
-    },
-    { isActive: voiceEnabled && voiceBackendAvailable },
-  );
 
   if (!voiceEnabled) {
     return (

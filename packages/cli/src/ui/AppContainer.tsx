@@ -761,6 +761,10 @@ export const AppContainer = (props: AppContainerProps) => {
   const sttEnvKey = settings.merged.voice?.sttEnvKey;
   const sttApiKey = sttEnvKey ? process.env[sttEnvKey] : undefined;
   const voice = useVoice(sttEndpoint, sttApiKey);
+  const voiceStart = voice.start;
+  const voiceStop = voice.stop;
+  const voiceReset = voice.reset;
+  const voiceStateValue = voice.voiceState;
 
   const {
     streamingState,
@@ -2095,12 +2099,12 @@ export const AppContainer = (props: AppContainerProps) => {
       handleClearScreen,
       dequeueAll: drain,
       onVoiceToggle: () => {
-        if (voice.voiceState === 'idle') void voice.start();
-        else if (voice.voiceState === 'recording')
-          void voice.stop().then((transcript) => {
+        if (voiceStateValue === 'idle') void voiceStart();
+        else if (voiceStateValue === 'recording')
+          void voiceStop().then((transcript) => {
             if (transcript) buffer.insert(transcript, { paste: false });
           });
-        else if (voice.voiceState === 'error') voice.reset();
+        else if (voiceStateValue === 'error') voiceReset();
       },
       // Welcome back dialog
       handleWelcomeBackSelection,
@@ -2163,7 +2167,10 @@ export const AppContainer = (props: AppContainerProps) => {
       retryLastPrompt,
       handleClearScreen,
       drain,
-      voice,
+      voiceStateValue,
+      voiceStart,
+      voiceStop,
+      voiceReset,
       buffer,
       handleWelcomeBackSelection,
       handleWelcomeBackClose,
