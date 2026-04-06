@@ -18,7 +18,7 @@ import { transcribe } from '../../services/sttClient.js';
 
 export type VoiceState = 'idle' | 'recording' | 'transcribing' | 'error';
 
-export function useVoice(sttEndpoint: string) {
+export function useVoice(sttEndpoint: string, sttApiKey?: string) {
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [error, setError] = useState<string | null>(null);
   const procRef = useRef<ChildProcess | null>(null);
@@ -52,7 +52,12 @@ export function useVoice(sttEndpoint: string) {
     const audioPath = audioPathRef.current;
     try {
       await stopRecording(procRef.current);
-      const text = await transcribe(audioPath, sttEndpoint);
+      const text = await transcribe(
+        audioPath,
+        sttEndpoint,
+        'whisper-1',
+        sttApiKey,
+      );
       setVoiceState('idle');
       fs.unlink(audioPath, () => {});
       audioPathRef.current = null;
@@ -62,7 +67,7 @@ export function useVoice(sttEndpoint: string) {
       setError(e instanceof Error ? e.message : String(e));
       return '';
     }
-  }, [voiceState, sttEndpoint]);
+  }, [voiceState, sttEndpoint, sttApiKey]);
 
   const reset = useCallback(() => {
     setVoiceState('idle');

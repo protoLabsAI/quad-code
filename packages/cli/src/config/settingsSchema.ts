@@ -1711,6 +1711,16 @@ const SETTINGS_SCHEMA = {
           'OpenAI-compatible speech-to-text endpoint URL (e.g. a local faster-whisper server).',
         showInDialog: true,
       },
+      sttEnvKey: {
+        type: 'string',
+        label: 'STT API Key Env Var',
+        category: 'Voice',
+        requiresRestart: false,
+        default: undefined as string | undefined,
+        description:
+          'Name of the environment variable holding the API key for the STT endpoint (e.g. GATEWAY_API_KEY).',
+        showInDialog: true,
+      },
     },
   },
 

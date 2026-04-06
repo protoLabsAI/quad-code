@@ -758,7 +758,9 @@ export const AppContainer = (props: AppContainerProps) => {
   const voiceEnabled = settings.merged.voice?.enabled ?? false;
   const sttEndpoint =
     settings.merged.voice?.sttEndpoint ?? DEFAULT_STT_ENDPOINT;
-  const voice = useVoice(sttEndpoint);
+  const sttEnvKey = settings.merged.voice?.sttEnvKey;
+  const sttApiKey = sttEnvKey ? process.env[sttEnvKey] : undefined;
+  const voice = useVoice(sttEndpoint, sttApiKey);
 
   const {
     streamingState,
