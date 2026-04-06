@@ -218,25 +218,34 @@ export const useGeminiStream = (
     return new GitService(config.getProjectRoot(), storage);
   }, [config, storage]);
 
+  // Stable refs so the scheduler is not recreated on every render.
+  // Without this, the inline arrow function causes:
+  //   onComplete → allToolCallsCompleteHandler → scheduler (useMemo)
+  // to change on every render. When the scheduler is recreated mid-flight,
+  // in-flight tool calls complete against stale closures and never get their
+  // responseSubmittedToGemini flag set, leaving the spinner stuck forever.
+  const addItemRef = useRef(addItem);
+  addItemRef.current = addItem;
+  const onCompleteFnRef = useRef<
+    ((tools: TrackedToolCall[]) => Promise<void>) | undefined
+  >(undefined);
+
+  const stableOnComplete = useCallback(
+    async (completedToolCallsFromScheduler: TrackedToolCall[]) => {
+      if (completedToolCallsFromScheduler.length > 0) {
+        addItemRef.current(
+          mapTrackedToolCallsToDisplay(completedToolCallsFromScheduler),
+          Date.now(),
+        );
+        await onCompleteFnRef.current?.(completedToolCallsFromScheduler);
+      }
+    },
+    [],
+  );
+
   const [toolCalls, scheduleToolCalls, markToolsAsSubmitted] =
     useReactToolScheduler(
-      async (completedToolCallsFromScheduler) => {
-        // This onComplete is called when ALL scheduled tools for a given batch are done.
-        if (completedToolCallsFromScheduler.length > 0) {
-          // Add the final state of these tools to the history for display.
-          addItem(
-            mapTrackedToolCallsToDisplay(
-              completedToolCallsFromScheduler as TrackedToolCall[],
-            ),
-            Date.now(),
-          );
-
-          // Handle tool response submission immediately when tools complete
-          await handleCompletedTools(
-            completedToolCallsFromScheduler as TrackedToolCall[],
-          );
-        }
-      },
+      stableOnComplete,
       config,
       getPreferredEditor,
       onEditorClose,
@@ -1608,6 +1617,10 @@ export const useGeminiStream = (
       settings?.merged?.tools?.verifyCommand,
     ],
   );
+
+  // Keep the stable callback ref current so it always delegates to the
+  // latest handleCompletedTools without recreating the scheduler.
+  onCompleteFnRef.current = handleCompletedTools;
 
   // Drain queued tool completions that arrived while the model was streaming.
   useEffect(() => {
