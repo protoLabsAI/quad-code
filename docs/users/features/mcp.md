@@ -147,6 +147,24 @@ CLI:
 qwen mcp add --transport sse sseServer http://localhost:8080/sse --timeout 30000
 ```
 
+## Server instructions
+
+MCP servers can return an `instructions` string in their [initialize response](https://spec.modelcontextprotocol.io/specification/2024-11-05/basic/lifecycle/#initialization) (part of the MCP spec). When a server provides instructions, proto automatically appends them to the system prompt at session start under a labelled block:
+
+```
+# MCP Server Instructions
+
+## MCP Server: <server-name>
+
+<instructions text from the server>
+```
+
+This lets server authors embed usage guidance — which tool to call, how to format queries, what the server's constraints are — directly into the model's context without requiring any user-side `AGENTS.md` configuration. Instructions from multiple servers are each appended in their own block.
+
+> [!tip]
+>
+> If you're building an MCP server and want the model to use your tools effectively, implement the `instructions` field in your initialize response. See the [fff example](https://github.com/dmtrKovalenko/fff.nvim#mcp) for a well-structured server instructions block.
+
 ## Safety and control
 
 ### Trust (skip confirmations)
