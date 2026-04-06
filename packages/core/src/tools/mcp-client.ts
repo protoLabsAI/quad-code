@@ -151,7 +151,7 @@ export class McpClient {
       });
 
       await this.client.connect(this.transport, {
-        timeout: this.serverConfig.timeout,
+        timeout: this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
       });
 
       this.updateStatus(MCPServerStatus.CONNECTED);
