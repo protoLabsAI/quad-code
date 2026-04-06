@@ -52,6 +52,14 @@ export function useVoice(sttEndpoint: string, sttApiKey?: string) {
     const audioPath = audioPathRef.current;
     try {
       await stopRecording(procRef.current);
+      // WAV header alone is 44 bytes — if the file is no larger, no audio was captured.
+      const stat = fs.statSync(audioPath);
+      if (stat.size <= 44) {
+        setVoiceState('idle');
+        fs.unlink(audioPath, () => {});
+        audioPathRef.current = null;
+        return '';
+      }
       const text = await transcribe(
         audioPath,
         sttEndpoint,
