@@ -1408,12 +1408,15 @@ export async function createTransport(
       cwd: mcpServerConfig.cwd,
       stderr: 'pipe',
     });
-    if (debugMode) {
-      transport.stderr!.on('data', (data) => {
+    // Always drain stderr to prevent the child process from blocking on a full
+    // pipe buffer. In debug mode, also log the output.
+    transport.stderr!.on('data', (data) => {
+      if (debugMode) {
         const stderrStr = data.toString().trim();
         debugLogger.debug(`MCP STDERR (${mcpServerName}):`, stderrStr);
-      });
-    }
+      }
+      // non-debug: data is consumed and discarded, preventing backpressure
+    });
     return transport;
   }
 
