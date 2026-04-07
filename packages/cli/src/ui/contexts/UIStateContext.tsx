@@ -145,6 +145,7 @@ export interface UIState {
   voiceEnabled: boolean;
   voiceBackendAvailable: boolean;
   voiceState: 'idle' | 'recording' | 'transcribing' | 'error';
+  voiceError: string | null;
   // Prompt suggestion
   promptSuggestion: string | null;
   /** Dismiss prompt suggestion (clears state, aborts speculation) */

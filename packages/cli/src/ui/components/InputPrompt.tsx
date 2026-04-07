@@ -144,6 +144,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   const voiceEnabled = uiState.voiceEnabled;
   const voiceBackendAvailable = uiState.voiceBackendAvailable;
   const voiceState = uiState.voiceState;
+  const voiceError = uiState.voiceError;
   const { agents, agentTabBarFocused } = useAgentViewState();
   const { setAgentTabBarFocused } = useAgentViewActions();
   const hasAgents = agents.size > 0;
@@ -1316,7 +1317,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
               ? '[● REC]'
               : voiceState === 'transcribing'
                 ? '[◌ STT...]'
-                : `[Voice error: ${'unknown'}]`}
+                : `[Voice error: ${voiceError ?? 'unknown'}]`}
           </Text>
         </Box>
       )}

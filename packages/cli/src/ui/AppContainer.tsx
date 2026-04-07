@@ -1946,6 +1946,7 @@ export const AppContainer = (props: AppContainerProps) => {
       voiceEnabled,
       voiceBackendAvailable: voice.backendAvailable,
       voiceState: voice.voiceState,
+      voiceError: voice.error,
       // Prompt suggestion
       promptSuggestion,
       dismissPromptSuggestion,
@@ -2056,6 +2057,7 @@ export const AppContainer = (props: AppContainerProps) => {
       voiceEnabled,
       voice.backendAvailable,
       voice.voiceState,
+      voice.error,
       // Prompt suggestion
       promptSuggestion,
       dismissPromptSuggestion,
