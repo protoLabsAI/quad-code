@@ -60,7 +60,7 @@ export async function runPostEditVerify(
             : output;
 
         resolve(
-          `[Post-edit verification FAILED — \`${verifyCommand}\` exited ${error.code ?? 'non-zero'}]\n${truncated}\n[Fix the issue before continuing]`,
+          `[Post-edit verification FAILED — \`${verifyCommand}\` exited ${error.code ?? 'non-zero'}]\n${truncated}\n\nRemediation:\n1. Read the error above carefully — identify which file(s) caused it\n2. Fix the root cause — do not re-run the failing command until the error is understood\n3. Re-run \`${verifyCommand}\` after fixing to confirm it passes`,
         );
       },
     );

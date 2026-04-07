@@ -27,8 +27,10 @@
  * no I/O cost.
  */
 
+import path from 'node:path';
 import { CheckpointStore } from './checkpointStore.js';
 import { ToolNames } from '../tools/tool-names.js';
+import type { Config } from '../config/config.js';
 
 // ─── Session-scoped singleton ──────────────────────────────────────────────
 
@@ -81,6 +83,39 @@ export function snapshotFileBeforeEdit(
   if (!filePath || typeof filePath !== 'string') return false;
 
   return checkpointStore.snapshotFile(promptId, filePath);
+}
+
+/**
+ * Create a git snapshot in the shadow repo before a file-mutating tool runs.
+ * Provides durable, named checkpoints that survive process crashes and enable
+ * per-edit rollback via GitService.restoreProjectFromSnapshot().
+ *
+ * Fire-and-forget safe: errors are swallowed so that a snapshot failure never
+ * blocks the tool from executing.
+ *
+ * @param config   - Runtime config (provides access to the GitService).
+ * @param toolName - The canonical tool name (e.g. `ToolNames.EDIT`).
+ * @param args     - Tool call arguments (used to extract the target file path).
+ * @returns The shadow-repo commit hash if a snapshot was created, otherwise null.
+ */
+export async function gitSnapshotBeforeEdit(
+  config: Config,
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<string | null> {
+  if (!FILE_MUTATING_TOOLS.has(toolName)) return null;
+  const filePath = extractFilePath(toolName, args);
+  if (!filePath) return null;
+
+  try {
+    const gitService = await config.getGitService();
+    const label = `proto-checkpoint:${toolName}:${path.basename(filePath)}`;
+    const hash = await gitService.createFileSnapshot(label);
+    return hash ?? null;
+  } catch {
+    // Snapshot failure must never block tool execution
+    return null;
+  }
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────

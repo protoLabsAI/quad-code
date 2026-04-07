@@ -57,6 +57,66 @@ export const COMPRESSED_CONTEXT_PREFIX = '[COMPRESSED_CONTEXT]';
 export const MIN_COMPRESSION_FRACTION = 0.05;
 
 /**
+ * Observation masking: retain the last `verbatimWindowSize` tool call/result
+ * pairs verbatim and replace everything older with a single placeholder.
+ *
+ * Research finding (JetBrains, 2025): observation masking reduces peak token
+ * usage 26-54% while maintaining or improving agent accuracy. LLM summarisation
+ * made agents run 15% *longer* due to summary-comprehension overhead.
+ *
+ * Use this as an alternative to LLM-based compression for long-running agents.
+ *
+ * @param history            - Full conversation history.
+ * @param verbatimWindowSize - Number of recent tool-call/result pairs to keep
+ *                             verbatim. Defaults to INCREMENTAL_PROTECTED_TAIL.
+ */
+export function applyObservationMask(
+  history: Content[],
+  verbatimWindowSize: number = INCREMENTAL_PROTECTED_TAIL,
+): Content[] {
+  if (history.length <= verbatimWindowSize) return history;
+
+  // Count tool-call/result pairs from the end, keeping `verbatimWindowSize`
+  // pairs intact. A "pair" is a model message with functionCall(s) followed by
+  // a user message with functionResponse(s).
+  let pairsKept = 0;
+  let cutIndex = history.length;
+
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i];
+    // A user message with functionResponse(s) ends a pair
+    if (msg?.role === 'user' && msg.parts?.some((p) => p.functionResponse)) {
+      pairsKept++;
+      if (pairsKept >= verbatimWindowSize) {
+        cutIndex = i;
+        break;
+      }
+    }
+  }
+
+  if (cutIndex === 0) return history;
+
+  const maskedCount = history
+    .slice(0, cutIndex)
+    .filter(
+      (m) =>
+        (m.role === 'user' && m.parts?.some((p) => p.functionResponse)) ||
+        (m.role === 'model' && m.parts?.some((p) => p.functionCall)),
+    ).length;
+
+  const placeholder: Content = {
+    role: 'user',
+    parts: [
+      {
+        text: `[OBSERVATION_MASK: ${maskedCount} tool call/result pairs from earlier in the session have been masked to reduce context. The most recent ${verbatimWindowSize} pairs are preserved verbatim below.]`,
+      },
+    ],
+  };
+
+  return [placeholder, ...history.slice(cutIndex)];
+}
+
+/**
  * Extracts the text content from a Content object.
  * Returns the concatenated text of all text parts, or null if none exist.
  */

@@ -914,13 +914,14 @@ System prompt 3`);
     it('should list subagents from both levels', async () => {
       const subagents = await manager.listSubagents();
 
-      expect(subagents).toHaveLength(7); // agent1 (project takes precedence), agent2, agent3, general-purpose (built-in), Explore (built-in), verify (built-in), coordinator (built-in)
+      expect(subagents).toHaveLength(8); // agent1 (project takes precedence), agent2, agent3, general-purpose (built-in), Explore (built-in), plan (built-in), verify (built-in), coordinator (built-in)
       expect(subagents.map((s) => s.name)).toEqual([
         'agent1',
         'agent2',
         'agent3',
         'general-purpose',
         'Explore',
+        'plan',
         'verify',
         'coordinator',
       ]);
@@ -956,6 +957,7 @@ System prompt 3`);
         'coordinator',
         'Explore',
         'general-purpose',
+        'plan',
         'verify',
       ]);
     });
@@ -968,10 +970,11 @@ System prompt 3`);
 
       const subagents = await manager.listSubagents();
 
-      expect(subagents).toHaveLength(4); // Only built-in agents remain
+      expect(subagents).toHaveLength(5); // Only built-in agents remain
       expect(subagents.map((s) => s.name)).toEqual([
         'general-purpose',
         'Explore',
+        'plan',
         'verify',
         'coordinator',
       ]);
@@ -985,10 +988,11 @@ System prompt 3`);
 
       const subagents = await manager.listSubagents();
 
-      expect(subagents).toHaveLength(4); // Only built-in agents remain
+      expect(subagents).toHaveLength(5); // Only built-in agents remain
       expect(subagents.map((s) => s.name)).toEqual([
         'general-purpose',
         'Explore',
+        'plan',
         'verify',
         'coordinator',
       ]);

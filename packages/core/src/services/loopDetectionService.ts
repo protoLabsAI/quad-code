@@ -18,7 +18,11 @@ import {
 } from '../telemetry/types.js';
 import type { Config } from '../config/config.js';
 
-const TOOL_CALL_LOOP_THRESHOLD = 5;
+// Sliding-window doom-loop detection: track last DOOM_WINDOW_SIZE tool calls;
+// if any single fingerprint appears DOOM_REPEAT_THRESHOLD or more times within
+// the window, it is a doom loop regardless of whether the calls are consecutive.
+export const DOOM_WINDOW_SIZE = 20;
+export const DOOM_REPEAT_THRESHOLD = 3;
 const CONTENT_LOOP_THRESHOLD = 10;
 const CONTENT_CHUNK_SIZE = 50;
 const MAX_HISTORY_LENGTH = 1000;
@@ -31,9 +35,8 @@ export class LoopDetectionService {
   private readonly config: Config;
   private promptId = '';
 
-  // Tool call tracking
-  private lastToolCallKey: string | null = null;
-  private toolCallRepetitionCount: number = 0;
+  // Tool call tracking — sliding window of fingerprints
+  private readonly toolCallWindow: string[] = [];
 
   // Content streaming tracking
   private streamContentHistory = '';
@@ -94,13 +97,16 @@ export class LoopDetectionService {
 
   private checkToolCallLoop(toolCall: { name: string; args: object }): boolean {
     const key = this.getToolCallKey(toolCall);
-    if (this.lastToolCallKey === key) {
-      this.toolCallRepetitionCount++;
-    } else {
-      this.lastToolCallKey = key;
-      this.toolCallRepetitionCount = 1;
+
+    // Maintain sliding window of size DOOM_WINDOW_SIZE
+    this.toolCallWindow.push(key);
+    if (this.toolCallWindow.length > DOOM_WINDOW_SIZE) {
+      this.toolCallWindow.shift();
     }
-    if (this.toolCallRepetitionCount >= TOOL_CALL_LOOP_THRESHOLD) {
+
+    // Count occurrences of this fingerprint in the window
+    const count = this.toolCallWindow.filter((k) => k === key).length;
+    if (count >= DOOM_REPEAT_THRESHOLD) {
       logLoopDetected(
         this.config,
         new LoopDetectedEvent(
@@ -302,8 +308,7 @@ export class LoopDetectionService {
   }
 
   private resetToolCallCount(): void {
-    this.lastToolCallKey = null;
-    this.toolCallRepetitionCount = 0;
+    this.toolCallWindow.length = 0;
   }
 
   private resetContentTracking(resetHistory = true): void {

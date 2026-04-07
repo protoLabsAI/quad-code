@@ -59,12 +59,21 @@ import type {
 import { type AgentEventEmitter, AgentEventType } from './agent-events.js';
 import type { AgentContextCompactedEvent } from './agent-events.js';
 import { estimateTokens, compactMessages } from './compaction.js';
+import { applyObservationMask } from '../../services/chatCompressionService.js';
 import { AgentStatistics, type AgentStatsSummary } from './agent-statistics.js';
 import { AgentTool } from '../../tools/agent.js';
 import { ToolNames } from '../../tools/tool-names.js';
 import { DEFAULT_QWEN_MODEL } from '../../config/models.js';
 import { type ContextState, templateString } from './agent-headless.js';
-import { beginTurn, snapshotFileBeforeEdit } from '../../core/agentCore.js';
+import {
+  beginTurn,
+  snapshotFileBeforeEdit,
+  gitSnapshotBeforeEdit,
+} from '../../core/agentCore.js';
+import {
+  sessionScopeLock,
+  formatScopeViolationMessage,
+} from '../../services/scopeLock.js';
 
 /**
  * Result of a single reasoning loop invocation.
@@ -363,9 +372,12 @@ export class AgentCore {
     let terminateMode: AgentTerminateMode | null = null;
 
     // ── P0: Doom loop detection ───────────────────────────────
-    const DOOM_LOOP_THRESHOLD = 5;
+    // Sliding 20-call window: if any fingerprint appears 3+ times = doom loop.
+    // Also detects strict A→B→A→B alternation patterns.
+    const DOOM_WINDOW_SIZE = 20;
+    const DOOM_REPEAT_THRESHOLD = 3;
     const DOOM_LOOP_AB_WINDOW = 6; // for A→B→A→B pattern detection
-    const recentToolCalls: string[] = []; // circular buffer of "toolName:argsJSON"
+    const recentToolCalls: string[] = []; // sliding window, max DOOM_WINDOW_SIZE
 
     // ── P0b: Analysis-only loop detection ────────────────────
     // Tracks turns where the model makes tool calls but never writes/edits
@@ -427,13 +439,21 @@ export class AgentCore {
       // ── Context compaction ──────────────────────────────────
       // When max_context_tokens is set and the tracked token count exceeds
       // 90% of the limit, compact the chat history before the next API call.
+      // Observation masking (verbatim rolling window) is applied first — it is
+      // cheaper and empirically more effective than LLM summarisation for
+      // long-running agents (JetBrains Research, 2025).
       if (this.runConfig.max_context_tokens && this.lastPromptTokenCount > 0) {
         const maxTokens = this.runConfig.max_context_tokens;
         if (this.lastPromptTokenCount > maxTokens * 0.9) {
           const historyBefore = chat.getHistory();
           const tokensBefore = estimateTokens(historyBefore);
           const targetTokens = Math.floor(maxTokens * 0.7);
-          const compacted = compactMessages(historyBefore, targetTokens);
+          // Apply observation masking first (fast, no API call)
+          const masked = applyObservationMask(historyBefore);
+          const compacted =
+            estimateTokens(masked) <= targetTokens
+              ? masked
+              : compactMessages(masked, targetTokens);
           if (compacted.length < historyBefore.length) {
             chat.setHistory(compacted);
             const tokensAfter = estimateTokens(compacted);
@@ -576,31 +596,30 @@ export class AgentCore {
         for (const fc of functionCalls) {
           const key = `${String(fc.name)}:${JSON.stringify(fc.args ?? {})}`;
           recentToolCalls.push(key);
-          if (recentToolCalls.length > DOOM_LOOP_THRESHOLD * 2) {
+          if (recentToolCalls.length > DOOM_WINDOW_SIZE) {
             recentToolCalls.shift();
           }
         }
 
-        // Check: last N calls are all identical (A→A→A→A→A pattern)
+        const LOOP_RECOVERY_MSG =
+          'You appear to be stuck in a repetitive loop. Stop retrying the same approach. Try a different tool, different arguments, or a fundamentally different strategy to accomplish the goal.';
+
+        // Check: any fingerprint appears DOOM_REPEAT_THRESHOLD times in the window
         let loopWarningInjected = false;
-        if (recentToolCalls.length >= DOOM_LOOP_THRESHOLD) {
-          const last = recentToolCalls.slice(-DOOM_LOOP_THRESHOLD);
-          const isSimpleLoop = last.every((k) => k === last[0]);
-          if (isSimpleLoop) {
-            currentMessages = [
-              ...currentMessages,
-              {
-                role: 'user',
-                parts: [
-                  {
-                    text: 'You appear to be stuck in a repetitive loop. Stop retrying the same approach. Try a different tool, different arguments, or a fundamentally different strategy to accomplish the goal.',
-                  },
-                ],
-              },
-            ];
-            recentToolCalls.length = 0;
-            loopWarningInjected = true;
-          }
+        const fingerprintCounts = new Map<string, number>();
+        for (const k of recentToolCalls) {
+          fingerprintCounts.set(k, (fingerprintCounts.get(k) ?? 0) + 1);
+        }
+        const hasFrequentRepeat = [...fingerprintCounts.values()].some(
+          (c) => c >= DOOM_REPEAT_THRESHOLD,
+        );
+        if (hasFrequentRepeat) {
+          currentMessages = [
+            ...currentMessages,
+            { role: 'user', parts: [{ text: LOOP_RECOVERY_MSG }] },
+          ];
+          recentToolCalls.length = 0;
+          loopWarningInjected = true;
         }
 
         // Check: alternating A→B→A→B pattern (last 6 calls, strictly alternating between 2 keys)
@@ -612,7 +631,6 @@ export class AgentCore {
           const uniqueKeys = new Set(lastAB);
           if (uniqueKeys.size === 2) {
             const keys = Array.from(uniqueKeys);
-            // Strictly alternating: each element at position i matches one of two parity patterns
             const isAlternatingVariantA = lastAB.every(
               (k, i) => k === keys[i % 2],
             );
@@ -622,14 +640,7 @@ export class AgentCore {
             if (isAlternatingVariantA || isAlternatingVariantB) {
               currentMessages = [
                 ...currentMessages,
-                {
-                  role: 'user',
-                  parts: [
-                    {
-                      text: 'You appear to be stuck in a repetitive loop. Stop retrying the same approach. Try a different tool, different arguments, or a fundamentally different strategy to accomplish the goal.',
-                    },
-                  ],
-                },
+                { role: 'user', parts: [{ text: LOOP_RECOVERY_MSG }] },
               ];
               recentToolCalls.length = 0;
             }
@@ -822,6 +833,52 @@ export class AgentCore {
         toolResponseParts.push(functionResponsePart);
         continue;
       }
+      // ── Scope lock: reject writes outside permitted file set ───────────
+      const fcArgs = (fc.args ?? {}) as Record<string, unknown>;
+      const fcName = String(fc.name);
+      if (
+        (fcName === 'write_file' || fcName === 'edit') &&
+        typeof fcArgs['file_path'] === 'string'
+      ) {
+        const violation = sessionScopeLock.checkWrite(fcArgs['file_path']);
+        if (violation) {
+          const violationMessage = formatScopeViolationMessage(violation);
+          const functionResponsePart = {
+            functionResponse: {
+              id: callId,
+              name: fcName,
+              response: { error: violationMessage },
+            },
+          };
+          this.eventEmitter?.emit(AgentEventType.TOOL_CALL, {
+            subagentId: this.subagentId,
+            round: currentRound,
+            callId,
+            name: fcName,
+            args: fcArgs,
+            description: `Scope violation: ${fcArgs['file_path']}`,
+            isOutputMarkdown: false,
+            timestamp: Date.now(),
+          } as AgentToolCallEvent);
+          this.eventEmitter?.emit(AgentEventType.TOOL_RESULT, {
+            subagentId: this.subagentId,
+            round: currentRound,
+            callId,
+            name: fcName,
+            success: false,
+            error: violationMessage,
+            responseParts: [functionResponsePart],
+            resultDisplay: `Scope violation: ${fcArgs['file_path']} is outside permitted scope`,
+            durationMs: 0,
+            timestamp: Date.now(),
+          } as AgentToolResultEvent);
+          this.recordToolCallStats(fcName, false, 0, violationMessage);
+          toolResponseParts.push(functionResponsePart);
+          continue;
+        }
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       authorizedCalls.push(fc);
     }
 
@@ -992,9 +1049,10 @@ export class AgentCore {
       } as AgentToolCallEvent);
 
       // ── Checkpoint: snapshot file content before any mutating tool ───────
-      // This is a no-op for non-file-mutating tools and adds no latency
-      // when no files are modified in a turn.
+      // In-memory snapshot (fast, always runs):
       snapshotFileBeforeEdit(promptId, toolName, args);
+      // Git-backed snapshot (durable, fire-and-forget):
+      void gitSnapshotBeforeEdit(this.runtimeContext, toolName, args);
       // ─────────────────────────────────────────────────────────────────────
 
       // pre-tool hook

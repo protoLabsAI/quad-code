@@ -13,14 +13,17 @@ import type {
 } from '../core/turn.js';
 import { GeminiEventType } from '../core/turn.js';
 import * as loggers from '../telemetry/loggers.js';
-import { LoopDetectionService } from './loopDetectionService.js';
+import {
+  LoopDetectionService,
+  DOOM_REPEAT_THRESHOLD,
+} from './loopDetectionService.js';
 
 vi.mock('../telemetry/loggers.js', () => ({
   logLoopDetected: vi.fn(),
   logLoopDetectionDisabled: vi.fn(),
 }));
 
-const TOOL_CALL_LOOP_THRESHOLD = 5;
+const TOOL_CALL_LOOP_THRESHOLD = DOOM_REPEAT_THRESHOLD;
 const CONTENT_LOOP_THRESHOLD = 10;
 const CONTENT_CHUNK_SIZE = 50;
 

@@ -121,12 +121,11 @@ export function formatBaseline(result: BaselineResult): string {
     );
   }
 
-  if (result.verifyCommand && result.verifyPassed !== null) {
-    const status = result.verifyPassed ? 'PASSED' : 'FAILED';
-    lines.push(`Verify (${result.verifyCommand}): ${status}`);
-    if (!result.verifyPassed && result.verifyOutput) {
-      lines.push(result.verifyOutput);
-    }
+  // Only surface verify output on failure — silent on pass to preserve context budget.
+  if (result.verifyCommand && result.verifyPassed === false) {
+    lines.push(
+      `Verify (${result.verifyCommand}): FAILED\n${result.verifyOutput ?? ''}\n[Fix the above before making changes]`,
+    );
   }
 
   return lines.join('\n');
