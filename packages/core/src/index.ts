@@ -124,6 +124,20 @@ export * from './services/sessionService.js';
 export * from './services/shellExecutionService.js';
 export * from './services/baselineCheck.js';
 export * from './services/postEditVerify.js';
+export { BehaviorVerifyGate } from './services/behaviorVerifyGate.js';
+export {
+  runWithMultiSample,
+  shouldRetry,
+  buildRetryPrompt,
+  formatMultiSampleResult,
+  DEFAULT_TEMPERATURES,
+  DEFAULT_MAX_ATTEMPTS,
+} from './services/multiSampleSelector.js';
+export type {
+  SampleAttemptResult,
+  MultiSampleResult,
+  MultiSampleConfig,
+} from './services/multiSampleSelector.js';
 export * from './services/sessionNotes.js';
 export * from './services/scopeLock.js';
 export * from './services/sprintContractService.js';

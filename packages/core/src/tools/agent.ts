@@ -49,12 +49,25 @@ import {
   context as otelContext,
 } from '@opentelemetry/api';
 import { getActiveTurnContext } from '../telemetry/turnSpanContext.js';
+import { BehaviorVerifyGate } from '../services/behaviorVerifyGate.js';
+import {
+  runWithMultiSample,
+  shouldRetry,
+  formatMultiSampleResult,
+} from '../services/multiSampleSelector.js';
+import { AgentHeadless } from '../agents/runtime/agent-headless.js';
 
 export interface AgentParams {
   description: string;
   prompt: string;
   subagent_type: string;
   run_in_background?: boolean;
+  /**
+   * When true, automatically retry the task up to 2 more times (with escalating
+   * temperatures and failure context injection) if the first attempt fails.
+   * The best result among all attempts is returned.
+   */
+  multi_sample?: boolean;
 }
 
 /**
@@ -120,6 +133,11 @@ export class AgentTool extends BaseDeclarativeTool<AgentParams, ToolResult> {
           type: 'boolean',
           description:
             'Set to true to run this agent in the background. You will be notified when it completes. Use this when you have other work to do in parallel and do not need the result immediately.',
+        },
+        multi_sample: {
+          type: 'boolean',
+          description:
+            'Set to true to enable multi-sample retry on failure. If the first attempt fails (doom loop, error, or max turns), the harness will automatically retry up to 2 more times with escalating temperatures and failure context injected into the retry prompt. The best result among all attempts is returned.',
         },
       },
       required: ['description', 'prompt', 'subagent_type'],
@@ -279,6 +297,7 @@ Usage notes:
 - When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.
 - You can run agents in the background using the run_in_background parameter. When an agent runs in the background, you will be automatically notified when it completes — do NOT poll or check on it. Continue with other work or respond to the user instead.
 - Use foreground (default) when you need the agent's results before you can proceed. Use background when you have genuinely independent work to do in parallel.
+- For high-stakes tasks where failure is costly, set multi_sample: true — the harness will automatically retry up to 2 more times with escalating temperatures and failure context if the first attempt fails, returning the best result. Use this for complex implementation tasks, not for simple searches.
 - Provide clear, detailed prompts so the agent can work autonomously and return exactly the information you need.
 - The agent's outputs should generally be trusted
 - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent
@@ -877,10 +896,70 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
         }
 
         // Get the results
-        const finalText = subagent.getFinalText();
-        const terminateMode = subagent.getTerminateMode();
-        const success = terminateMode === AgentTerminateMode.GOAL;
+        let finalText = subagent.getFinalText();
+        let terminateMode = subagent.getTerminateMode();
         const executionSummary = subagent.getExecutionSummary();
+
+        // Multi-sample retry: if the task failed and multi_sample is enabled,
+        // re-run with escalating temperatures and inject failure context.
+        if (
+          this.params.multi_sample &&
+          !signal?.aborted &&
+          shouldRetry(terminateMode ?? AgentTerminateMode.ERROR)
+        ) {
+          const behaviorScenarios = await BehaviorVerifyGate.loadScenarios(
+            this.config.getWorkingDir(),
+          );
+          const multiResult = await runWithMultiSample(
+            this.params.prompt,
+            behaviorScenarios,
+            this.config.getWorkingDir(),
+            async (retryPrompt, temperature, attemptIndex) => {
+              // Attempt 0 already ran — return the result we have
+              if (attemptIndex === 0) {
+                return {
+                  terminateMode: terminateMode ?? AgentTerminateMode.ERROR,
+                  finalText,
+                };
+              }
+              // Create a new subagent with modified temperature for retry
+              const retryConfig: SubagentConfig = {
+                ...subagentConfig,
+                modelConfig: {
+                  ...subagentConfig.modelConfig,
+                  temp: temperature,
+                },
+              };
+              const retrySubagent = await AgentHeadless.create(
+                subagentConfig.name,
+                this.config,
+                { systemPrompt: subagentConfig.systemPrompt },
+                retryConfig.modelConfig ?? {},
+                retryConfig.runConfig ?? {},
+                undefined,
+                this.eventEmitter,
+              );
+              const retryCtx = new ContextState();
+              retryCtx.set('task_prompt', retryPrompt);
+              await retrySubagent.execute(retryCtx, signal ?? undefined);
+              return {
+                terminateMode:
+                  retrySubagent.getTerminateMode() ?? AgentTerminateMode.ERROR,
+                finalText: retrySubagent.getFinalText(),
+              };
+            },
+            { maxAttempts: 3 },
+          );
+
+          // Use the best result
+          finalText = multiResult.best.finalText;
+          terminateMode = multiResult.best.terminateMode;
+          if (multiResult.attempts.length > 1) {
+            finalText += `\n\n---\n${formatMultiSampleResult(multiResult)}`;
+          }
+        }
+
+        const success = terminateMode === AgentTerminateMode.GOAL;
 
         // Determine status for span
         const spanStatus = signal?.aborted
@@ -918,6 +997,27 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
             },
             updateOutput,
           );
+        }
+
+        // Run behavior verification scenarios only when the subagent completed its goal
+        if (terminateMode === AgentTerminateMode.GOAL) {
+          const behaviorScenarios = await BehaviorVerifyGate.loadScenarios(
+            this.config.getWorkingDir(),
+          );
+          if (behaviorScenarios.length > 0) {
+            const scenarioResults = await BehaviorVerifyGate.runScenarios(
+              behaviorScenarios,
+              this.config.getWorkingDir(),
+            );
+            const gateMsg = BehaviorVerifyGate.gateMessage(scenarioResults);
+            if (gateMsg) {
+              // Inject failure context back to the model alongside the subagent result
+              return {
+                llmContent: [{ text: finalText }, { text: gateMsg }],
+                returnDisplay: this.currentDisplay!,
+              };
+            }
+          }
         }
 
         return {

@@ -120,6 +120,16 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 
 **Never** ignore an escalation or force the same model to retry without changes. If the implementer said it's stuck, something needs to change.
 
+## Harness Features
+
+The harness provides automatic safety nets you can leverage when dispatching implementers:
+
+**Multi-sample retry** (`multi_sample: true`): For complex or high-risk tasks, set this on the Agent tool call. If the implementer fails (doom loop, error, max turns), the harness automatically retries up to 2 more times with escalating temperatures (0.7 → 1.0 → 1.3) and injects the failure context into each retry prompt. Returns the best result. Use for tasks that have previously failed or that touch many files.
+
+**Behavior verification gate**: If `.proto/verify-scenarios.json` exists in the project, the harness runs those scenarios after every successful implementer completion. Failures are injected back to the model for self-correction. Add scenarios for smoke tests, build checks, and HTTP health checks.
+
+**Sprint contract scope lock**: If the implementing agent was given a sprint contract (via the `sprint-contract` skill), the scope lock prevents it from writing files outside the agreed set. Any violation is blocked and reported.
+
 ## Prompt Templates
 
 - `./implementer-prompt.md` - Dispatch implementer subagent
