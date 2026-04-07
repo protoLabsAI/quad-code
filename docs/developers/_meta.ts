@@ -17,6 +17,7 @@ export default {
   },
 
   tools: 'Tools',
+  harness: 'Agent Harness',
 
   examples: {
     display: 'hidden',

@@ -44,6 +44,19 @@ Qwen Code is primarily composed of two main packages, along with a suite of tool
 - **Web Tools:** Fetching content from the web
 - **MCP Integration:** Connecting to Model Context Protocol servers for extended capabilities
 
+### 4. Agent Harness (`packages/core/src/services/`)
+
+**Purpose:** A set of safety and reliability services that wrap every subagent execution. The harness fires automatically and requires no code changes to benefit from.
+
+**Key services:**
+
+- **`behaviorVerifyGate`** — Runs user-configured shell verification scenarios after a subagent reports success. Failures are injected back to the agent for self-correction. Configured via `.proto/verify-scenarios.json`.
+- **`multiSampleSelector`** — Retries failed subagent tasks up to 2 more times with escalating temperatures (0.7 → 1.0 → 1.3) and failure context injection. Returns the highest-scored attempt. Enabled per Agent call with `multi_sample: true`.
+- **`repoMapService`** — Analyzes the project's import graph and runs personalized PageRank to surface the most-connected source files. Results are cached at `.proto/repo-map-cache.json`.
+- **`sprintContractService`** — Manages a scope lock that restricts file writes to a negotiated set of paths. The lock is persisted to `.proto/sprint-contract.json` and restored on session restart.
+
+See [Agent Harness](./harness) for full configuration and usage details.
+
 ## Interaction Flow
 
 A typical interaction with Qwen Code follows this flow:

@@ -125,12 +125,58 @@ When multiple agents share the same name, higher-priority location wins.
 
 Four agents are always available:
 
-| Agent             | Purpose                                              | Tools              |
-| ----------------- | ---------------------------------------------------- | ------------------ |
-| `general-purpose` | Complex multi-step tasks, code search                | All (except Agent) |
-| `Explore`         | Fast codebase search and analysis                    | Read-only          |
-| `verify`          | Review changes for correctness before finalizing     | Read-only          |
-| `coordinator`     | Orchestrate multi-agent work with task decomposition | All + Agent        |
+| Agent             | Purpose                                              | Tools               |
+| ----------------- | ---------------------------------------------------- | ------------------- |
+| `general-purpose` | Complex multi-step tasks, code search                | All (except Agent)  |
+| `Explore`         | Fast codebase search and analysis                    | Read-only + RepoMap |
+| `verify`          | Review changes for correctness before finalizing     | Read-only           |
+| `coordinator`     | Orchestrate multi-agent work with task decomposition | All + Agent         |
+
+The `Explore` and `Plan` agents use the `repo_map` tool automatically at the start of tasks on large codebases to orient themselves via import-graph PageRank before diving in. You can also call `repo_map` explicitly from any agent. See [Agent Harness — Repo map](../../developers/harness#repo-map) for details.
+
+## Multi-sample retry
+
+For high-stakes tasks where a single failed attempt is costly, set `multi_sample: true` on the Agent tool call. The harness will automatically retry up to 2 more times with escalating temperatures (0.7 → 1.0 → 1.3) if the first attempt fails, and return the best result.
+
+```json
+{
+  "subagent_type": "general-purpose",
+  "description": "Implement the auth service",
+  "prompt": "...",
+  "multi_sample": true
+}
+```
+
+Each retry includes a `[RETRY CONTEXT]` block summarizing what went wrong in the previous attempt. Attempts are scored (GOAL + verification pass = 3, GOAL = 3, partial = 1, error = 0) and the highest-scoring result is returned. When scores tie, the earlier (lower-temperature) attempt wins.
+
+Use multi-sample for complex implementation tasks, not for searches or read-only queries.
+
+See [Agent Harness — Multi-sample retry](../../developers/harness#multi-sample-retry) for the full scoring and temperature reference.
+
+## Behavior verification gate
+
+You can configure post-task verification scenarios that run automatically after a subagent completes successfully. If any scenario fails, the output is fed back to the agent so it can self-correct.
+
+Create `.proto/verify-scenarios.json` in your project root:
+
+```json
+[
+  {
+    "name": "Unit tests pass",
+    "command": "npm test -- --run",
+    "timeoutMs": 60000
+  },
+  {
+    "name": "Build succeeds",
+    "command": "npm run build",
+    "timeoutMs": 30000
+  }
+]
+```
+
+Scenarios run in parallel. Each has a `name`, a shell `command`, an optional `expectedPattern` (regex the stdout must match), and an optional `timeoutMs`. Exit code 0 is a pass when no pattern is specified.
+
+See [Agent Harness — Behavior verification gate](../../developers/harness#behavior-verification-gate) for the complete field reference.
 
 ## Background execution
 
