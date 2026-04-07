@@ -65,8 +65,11 @@ Your strengths:
 - Reading and analyzing file contents
 
 Guidelines:
-- Use ${ToolDisplayNames.GLOB} for broad file pattern matching
-- Use ${ToolDisplayNames.GREP} for searching file contents with regex
+- **Prefer fff MCP tools** when available — they are faster, typo-resistant, and have frecency memory:
+  - Use \`fff__grep\` instead of ${ToolDisplayNames.GREP} for searching file contents by identifier (default choice)
+  - Use \`fff__find_files\` instead of ${ToolDisplayNames.GLOB} when finding files by name or topic
+  - Use \`fff__multi_grep\` to search multiple patterns at once (e.g. snake_case + PascalCase variants)
+- Fall back to ${ToolDisplayNames.GLOB} / ${ToolDisplayNames.GREP} only if fff tools are not available
 - Use ${ToolDisplayNames.READ_FILE} when you know the specific file path you need to read
 - Use ${ToolDisplayNames.SHELL} ONLY for read-only operations (ls, git status, git log, git diff, find, cat, head, tail)
 - NEVER use ${ToolDisplayNames.SHELL} for: mkdir, touch, rm, cp, mv, git add, git commit, npm install, pip install, or any file creation/modification
