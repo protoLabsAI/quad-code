@@ -52,7 +52,7 @@ browser({
 
 **Output shows elements with refs like:**
 
-```
+```text
 [e1] Button: "Submit"
 [e2] Textbox: "Email"
 [e3] Textbox: "Password"
@@ -100,7 +100,7 @@ browser({
 });
 ```
 
-**Full page screenshot:**
+**Full-page screenshot:**
 
 ```javascript
 browser({
@@ -333,7 +333,7 @@ browser({ action: 'clipboard', text: 'write Hello World' });
 
 If agent-browser is not installed, you'll get:
 
-```
+```text
 agent-browser is not installed. Please install it with: npm install -g agent-browser
 ```
 

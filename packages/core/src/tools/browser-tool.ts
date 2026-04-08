@@ -315,9 +315,8 @@ function buildCommand(
     case 'find':
       args.push('find');
       if (params.selector) {
-        // e.g., 'find role button', 'find text Sign In'
-        const parts = params.selector.split(' ');
-        args.push(...parts);
+        // Pass selector as-is to handle semantic selectors with quoted strings
+        args.push(params.selector);
       }
       if (params.text) {
         // action like 'click', 'fill', etc.
@@ -352,16 +351,16 @@ function buildCommand(
     case 'mouse':
       args.push('mouse');
       if (params.selector) {
-        // e.g., 'mouse move 100 200'
-        args.push(...params.selector.split(' '));
+        // Pass as-is for complex mouse commands
+        args.push(params.selector);
       }
       break;
 
     case 'keyboard':
       args.push('keyboard');
       if (params.selector) {
-        // e.g., 'keyboard type hello'
-        args.push(...params.selector.split(' '));
+        // Pass as-is for complex keyboard commands
+        args.push(params.selector);
       }
       break;
 
@@ -385,7 +384,8 @@ function buildCommand(
     case 'cookies':
       args.push('cookies');
       if (params.selector) {
-        args.push(...params.selector.split(' '));
+        // Pass as-is for cookie commands
+        args.push(params.selector);
       }
       if (params.text) {
         args.push(params.text);
@@ -398,7 +398,8 @@ function buildCommand(
         args.push(params.text);
       }
       if (params.selector) {
-        args.push(...params.selector.split(' '));
+        // Pass as-is for storage commands
+        args.push(params.selector);
       }
       break;
 
@@ -425,7 +426,8 @@ function buildCommand(
     case 'chat':
       args.push('chat');
       if (params.text) {
-        args.push(`"${params.text}"`);
+        // Pass text verbatim - shell will handle quoting
+        args.push(params.text);
       }
       break;
 
@@ -602,10 +604,22 @@ class BrowserToolInvocation extends BaseToolInvocation<
   override async getConfirmationDetails(
     _abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails> {
+    const writeActions = ['screenshot', 'trace', 'profiler'];
+    const isWriteAction = writeActions.includes(this.params.action);
+    const outputPath =
+      isWriteAction && this.params.outputPath
+        ? this.params.outputPath
+        : undefined;
+
+    const basePrompt = `Perform browser action: ${this.params.action}${this.params.url ? ` on ${this.params.url}` : ''}`;
+    const fullPrompt = outputPath
+      ? `${basePrompt}\nOutput: ${outputPath}`
+      : basePrompt;
+
     const confirmationDetails: ToolCallConfirmationDetails = {
       type: 'info',
       title: 'Confirm Browser Automation',
-      prompt: `Perform browser action: ${this.params.action}${this.params.url ? ` on ${this.params.url}` : ''}`,
+      prompt: fullPrompt,
       permissionRules: [`BrowserTool(${this.params.action})`],
       urls: this.params.url ? [this.params.url] : undefined,
       onConfirm: async (
@@ -686,6 +700,17 @@ class BrowserToolInvocation extends BaseToolInvocation<
 
       child.on('error', (error) => {
         clearInterval(outputInterval);
+        outputCollected = true;
+
+        // Check if this is an AbortError (from signal.abort())
+        if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+          resolve({
+            llmContent: 'Browser action was cancelled by user.',
+            returnDisplay: 'Browser action cancelled.',
+          });
+          return;
+        }
+
         const errorMsg = `Failed to execute agent-browser: ${getErrorMessage(error)}`;
         debugLogger.error(`[BrowserTool] ${errorMsg}`);
         resolve({
@@ -702,6 +727,7 @@ class BrowserToolInvocation extends BaseToolInvocation<
         clearInterval(outputInterval);
         outputCollected = true;
 
+        // Skip if already resolved (e.g., by error handler for AbortError)
         if (signal.aborted) {
           resolve({
             llmContent: 'Browser action was cancelled by user.',
