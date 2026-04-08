@@ -4,8 +4,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
-import { BrowserTool, type BrowserToolParams } from './browser-tool.js';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import {
+  BrowserTool,
+  BrowserToolInvocation,
+  type BrowserToolParams,
+} from './browser-tool.js';
+
+vi.mock('node:child_process', () => ({
+  spawn: vi.fn(),
+}));
+
+vi.mock('node:fs', () => ({
+  default: {
+    existsSync: vi.fn().mockReturnValue(false),
+  },
+}));
+
+const mockSpawn = vi.mocked(spawn);
+const mockExistsSync = vi.mocked(fs.existsSync);
 
 const mockConfig = {
   getTargetDir: () => '/test/dir',
@@ -249,6 +269,125 @@ describe('BrowserTool', () => {
       expect(schema.properties['action'].enum).toContain('close');
       expect(schema.properties['action'].enum).toContain('snapshot');
       expect(schema.properties['action'].enum).toContain('click');
+    });
+  });
+
+  // ─── execute() tests ────────────────────────────────────────────────────────
+  //
+  // vi.mock('node:child_process') is hoisted to the top of the module so the
+  // real spawn is never called.  makeChild() configures mockSpawn and returns
+  // a fake ChildProcess that we drive by emitting events.
+
+  describe('execute()', () => {
+    function makeChild() {
+      const child = new EventEmitter();
+      const stdout = new EventEmitter();
+      const stderr = new EventEmitter();
+      const c = child as unknown as Record<string, unknown>;
+      c['stdout'] = stdout;
+      c['stderr'] = stderr;
+      mockSpawn.mockReturnValueOnce(
+        child as unknown as ReturnType<typeof spawn>,
+      );
+      return { child, stdout, stderr };
+    }
+
+    beforeEach(() => {
+      mockSpawn.mockReset();
+      mockExistsSync.mockReset();
+      // Reset the static binary path cache so each test re-runs discovery.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (BrowserToolInvocation as any).agentBrowserPath = null;
+    });
+
+    it('returns "not installed" error when binary is absent', async () => {
+      mockExistsSync.mockReturnValue(false);
+
+      const invocation = browserTool.build({
+        action: 'open',
+        url: 'https://example.com',
+      });
+      const result = await invocation.execute(new AbortController().signal);
+      expect(result.error).toBeDefined();
+      expect(result.llmContent).toMatch(/not installed/i);
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
+    it('resolves with stdout content on exit code 0', async () => {
+      // existsSync returns true for the first PATH entry → findAgentBrowser succeeds.
+      mockExistsSync.mockReturnValue(true);
+      const { child, stdout } = makeChild();
+
+      const invocation = browserTool.build({ action: 'snapshot' });
+      const resultPromise = invocation.execute(new AbortController().signal);
+
+      stdout.emit('data', Buffer.from('accessibility tree output'));
+      child.emit('close', 0, null);
+
+      const result = await resultPromise;
+      expect(result.error).toBeUndefined();
+      expect(result.llmContent).toContain('accessibility tree output');
+    });
+
+    it('resolves with error result on non-zero exit code', async () => {
+      mockExistsSync.mockReturnValue(true);
+      const { child, stderr } = makeChild();
+
+      const invocation = browserTool.build({
+        action: 'open',
+        url: 'https://example.com',
+      });
+      const resultPromise = invocation.execute(new AbortController().signal);
+
+      stderr.emit('data', Buffer.from('browser launch failed'));
+      child.emit('close', 1, null);
+
+      const result = await resultPromise;
+      expect(result.error).toBeDefined();
+      expect(result.error?.type).toBe('browser_tool_error');
+    });
+
+    it('resolves cancelled when AbortError fires; close does not double-resolve', async () => {
+      mockExistsSync.mockReturnValue(true);
+      const { child } = makeChild();
+
+      const controller = new AbortController();
+      const invocation = browserTool.build({
+        action: 'open',
+        url: 'https://example.com',
+      });
+      const resultPromise = invocation.execute(controller.signal);
+
+      // error fires first (AbortError from spawn's abort signal)
+      child.emit(
+        'error',
+        Object.assign(new Error('spawn aborted'), { name: 'AbortError' }),
+      );
+
+      // close fires immediately after (normal Node behaviour)
+      controller.abort();
+      child.emit('close', null, 'SIGTERM');
+
+      const result = await resultPromise;
+      // settle() guard: only the first resolve wins
+      expect(result.llmContent).toMatch(/cancelled/i);
+    });
+
+    it('resolves with error for non-abort spawn failure', async () => {
+      mockExistsSync.mockReturnValue(true);
+      const { child } = makeChild();
+
+      const invocation = browserTool.build({
+        action: 'open',
+        url: 'https://example.com',
+      });
+      const resultPromise = invocation.execute(new AbortController().signal);
+
+      child.emit('error', new Error('ENOENT: spawn failed'));
+
+      const result = await resultPromise;
+      expect(result.error).toBeDefined();
+      expect(result.llmContent).toMatch(/Failed to execute agent-browser/i);
     });
   });
 });
