@@ -335,7 +335,16 @@ function buildCommand(
         args.push(params.text);
       }
       if (params.attribute) {
-        args.push('--' + params.attribute);
+        // Only pass recognized wait-condition flags to avoid confusing agent-browser.
+        const WAIT_FLAGS: Record<string, string> = {
+          visibility: '--visibility',
+          text: '--text',
+          url: '--url',
+          load: '--load',
+          condition: '--condition',
+        };
+        const flag = WAIT_FLAGS[params.attribute];
+        if (flag) args.push(flag);
       }
       break;
 
@@ -426,7 +435,7 @@ function buildCommand(
     case 'chat':
       args.push('chat');
       if (params.text) {
-        // Pass text verbatim - shell will handle quoting
+        // Safe: spawn uses array args, not shell expansion.
         args.push(params.text);
       }
       break;
@@ -515,7 +524,7 @@ function buildCommand(
   return args;
 }
 
-class BrowserToolInvocation extends BaseToolInvocation<
+export class BrowserToolInvocation extends BaseToolInvocation<
   BrowserToolParams,
   ToolResult
 > {
@@ -674,11 +683,20 @@ class BrowserToolInvocation extends BaseToolInvocation<
       let stdout = '';
       let stderr = '';
       let outputCollected = false;
+      let resolved = false; // guard against double-resolve from error + close events
       const outputInterval = setInterval(() => {
         if (updateOutput && stdout && !outputCollected) {
           updateOutput(stdout);
         }
       }, 100);
+
+      const settle = (result: ToolResult) => {
+        if (resolved) return;
+        resolved = true;
+        clearInterval(outputInterval);
+        outputCollected = true;
+        resolve(result);
+      };
 
       const child = spawn(agentBrowser, args, {
         cwd: this.config.getTargetDir(),
@@ -699,12 +717,10 @@ class BrowserToolInvocation extends BaseToolInvocation<
       });
 
       child.on('error', (error) => {
-        clearInterval(outputInterval);
-        outputCollected = true;
-
-        // Check if this is an AbortError (from signal.abort())
+        // AbortError fires when the AbortSignal fires; close will also fire
+        // immediately after — settle() guards against the double-resolve.
         if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-          resolve({
+          settle({
             llmContent: 'Browser action was cancelled by user.',
             returnDisplay: 'Browser action cancelled.',
           });
@@ -713,7 +729,7 @@ class BrowserToolInvocation extends BaseToolInvocation<
 
         const errorMsg = `Failed to execute agent-browser: ${getErrorMessage(error)}`;
         debugLogger.error(`[BrowserTool] ${errorMsg}`);
-        resolve({
+        settle({
           llmContent: errorMsg,
           returnDisplay: errorMsg,
           error: {
@@ -724,12 +740,8 @@ class BrowserToolInvocation extends BaseToolInvocation<
       });
 
       child.on('close', (code, signalNode) => {
-        clearInterval(outputInterval);
-        outputCollected = true;
-
-        // Skip if already resolved (e.g., by error handler for AbortError)
         if (signal.aborted) {
-          resolve({
+          settle({
             llmContent: 'Browser action was cancelled by user.',
             returnDisplay: 'Browser action cancelled.',
           });
@@ -742,9 +754,8 @@ class BrowserToolInvocation extends BaseToolInvocation<
           const errorMsg = `agent-browser exited with code ${code}${signalNode ? ` (signal: ${signalNode})` : ''}:\n${finalOutput}`;
           debugLogger.error(`[BrowserTool] ${errorMsg}`);
 
-          // Truncate large output
           const truncatedResult = this.truncateOutput(finalOutput);
-          resolve({
+          settle({
             llmContent: truncatedResult,
             returnDisplay: `Browser action failed: ${code}`,
             error: {
@@ -759,10 +770,8 @@ class BrowserToolInvocation extends BaseToolInvocation<
           `[BrowserTool] Success: ${finalOutput.substring(0, 200)}`,
         );
 
-        // Truncate large output for LLM
         const truncatedResult = this.truncateOutput(finalOutput);
-
-        resolve({
+        settle({
           llmContent: truncatedResult,
           returnDisplay:
             finalOutput || 'Browser action completed successfully.',
