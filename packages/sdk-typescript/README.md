@@ -1,6 +1,6 @@
 # @proto/sdk
 
-A minimum experimental TypeScript SDK for programmatic access to Qwen Code.
+A TypeScript SDK for programmatic access to protoCLI.
 
 Feel free to submit a feature request/issue/PR.
 
@@ -43,7 +43,7 @@ for await (const message of result) {
 
 ### `query(config)`
 
-Creates a new query session with the Qwen Code.
+Creates a new query session with protoCLI.
 
 #### Parameters
 
@@ -52,31 +52,31 @@ Creates a new query session with the Qwen Code.
 
 #### QueryOptions
 
-| Option                   | Type                                           | Default          | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------ | ---------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cwd`                    | `string`                                       | `process.cwd()`  | The working directory for the query session. Determines the context in which file operations and commands are executed.                                                                                                                                                                                                                                                                                                                                                               |
-| `model`                  | `string`                                       | -                | The AI model to use (e.g., `'qwen-max'`, `'qwen-plus'`, `'qwen-turbo'`). Takes precedence over `OPENAI_MODEL` and `QWEN_MODEL` environment variables.                                                                                                                                                                                                                                                                                                                                 |
-| `pathToQwenExecutable`   | `string`                                       | Auto-detected    | Path to the Qwen Code executable. Supports multiple formats: `'qwen'` (native binary from PATH), `'/path/to/qwen'` (explicit path), `'/path/to/cli.js'` (Node.js bundle), `'node:/path/to/cli.js'` (force Node.js runtime), `'bun:/path/to/cli.js'` (force Bun runtime). If not provided, auto-detects from: `QWEN_CODE_CLI_PATH` env var, `~/.volta/bin/qwen`, `~/.npm-global/bin/qwen`, `/usr/local/bin/qwen`, `~/.local/bin/qwen`, `~/node_modules/.bin/qwen`, `~/.yarn/bin/qwen`. |
-| `permissionMode`         | `'default' \| 'plan' \| 'auto-edit' \| 'yolo'` | `'default'`      | Permission mode controlling tool execution approval. See [Permission Modes](#permission-modes) for details.                                                                                                                                                                                                                                                                                                                                                                           |
-| `canUseTool`             | `CanUseTool`                                   | -                | Custom permission handler for tool execution approval. Invoked when a tool requires confirmation. Must respond within 60 seconds or the request will be auto-denied. See [Custom Permission Handler](#custom-permission-handler).                                                                                                                                                                                                                                                     |
-| `baseURL`                | `string`                                       | -                | Base URL for the AI provider API. Routes requests through a custom gateway or proxy instead of calling the provider directly. Sets `OPENAI_BASE_URL` in the CLI process environment. Example: `'http://gateway:4000/v1'`.                                                                                                                                                                                                                                                             |
-| `env`                    | `Record<string, string>`                       | -                | Environment variables to pass to the proto CLI process. Merged with the current process environment.                                                                                                                                                                                                                                                                                                                                                                                  |
-| `systemPrompt`           | `string \| QuerySystemPromptPreset`            | -                | System prompt configuration for the main session. Use a string to fully override the built-in Qwen Code system prompt, or a preset object to keep the built-in prompt and append extra instructions.                                                                                                                                                                                                                                                                                  |
-| `mcpServers`             | `Record<string, McpServerConfig>`              | -                | MCP (Model Context Protocol) servers to connect. Supports external servers (stdio/SSE/HTTP) and SDK-embedded servers. External servers are configured with transport options like `command`, `args`, `url`, `httpUrl`, etc. SDK servers use `{ type: 'sdk', name: string, instance: Server }`.                                                                                                                                                                                        |
-| `abortController`        | `AbortController`                              | -                | Controller to cancel the query session. Call `abortController.abort()` to terminate the session and cleanup resources.                                                                                                                                                                                                                                                                                                                                                                |
-| `debug`                  | `boolean`                                      | `false`          | Enable debug mode for verbose logging from the CLI process.                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `maxSessionTurns`        | `number`                                       | `-1` (unlimited) | Maximum number of conversation turns before the session automatically terminates. A turn consists of a user message and an assistant response.                                                                                                                                                                                                                                                                                                                                        |
-| `coreTools`              | `string[]`                                     | -                | Equivalent to `permissions.allow` in settings.json as an allowlist. If specified, only these tools will be available to the AI (all other tools are disabled at registry level). Supports tool name aliases and pattern matching. Example: `['Read', 'Edit', 'Bash(git *)']`.                                                                                                                                                                                                         |
-| `excludeTools`           | `string[]`                                     | -                | Equivalent to `permissions.deny` in settings.json. Excluded tools return a permission error immediately. Takes highest priority over all other permission settings. Supports tool name aliases and pattern matching: tool name (`'write_file'`), shell command prefix (`'Bash(rm *)'`), or path patterns (`'Read(.env)'`, `'Edit(/src/**)'`).                                                                                                                                         |
-| `allowedTools`           | `string[]`                                     | -                | Equivalent to `permissions.allow` in settings.json. Matching tools bypass `canUseTool` callback and execute automatically. Only applies when tool requires confirmation. Supports same pattern matching as `excludeTools`. Example: `['ShellTool(git status)', 'ShellTool(npm test)']`.                                                                                                                                                                                               |
-| `authType`               | `'openai' \| 'qwen-oauth'`                     | `'openai'`       | Authentication type for the AI service. Using `'qwen-oauth'` in SDK is not recommended as credentials are stored in `~/.qwen` and may need periodic refresh.                                                                                                                                                                                                                                                                                                                          |
-| `agents`                 | `SubagentConfig[]`                             | -                | Configuration for subagents that can be invoked during the session. Subagents are specialized AI agents for specific tasks or domains.                                                                                                                                                                                                                                                                                                                                                |
-| `includePartialMessages` | `boolean`                                      | `false`          | When `true`, the SDK emits incomplete messages as they are being generated, allowing real-time streaming of the AI's response.                                                                                                                                                                                                                                                                                                                                                        |
-| `resume`                 | `string`                                       | -                | Resume a previous session by providing its session ID. Equivalent to CLI's `--resume` flag.                                                                                                                                                                                                                                                                                                                                                                                           |
-| `sessionId`              | `string`                                       | -                | Specify a session ID for the new session. Ensures SDK and CLI use the same ID without resuming history. Equivalent to CLI's `--session-id` flag.                                                                                                                                                                                                                                                                                                                                      |
+| Option                   | Type                                           | Default          | Description                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------ | ---------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cwd`                    | `string`                                       | `process.cwd()`  | The working directory for the query session. Determines the context in which file operations and commands are executed.                                                                                                                                                                                                                       |
+| `model`                  | `string`                                       | -                | The AI model to use (e.g., `'claude-opus-4-6'`, `'claude-sonnet-4-6'`, `'claude-haiku-4-5-20251001'`). Takes precedence over the `OPENAI_MODEL` environment variable.                                                                                                                                                                         |
+| `pathToQwenExecutable`   | `string`                                       | Auto-detected    | Path to the proto CLI executable. Supports multiple formats: `'proto'` (native binary from PATH), `'/path/to/proto'` (explicit path), `'/path/to/cli.js'` (Node.js bundle), `'node:/path/to/cli.js'` (force Node.js runtime), `'bun:/path/to/cli.js'` (force Bun runtime). If not provided, auto-detects the bundled CLI.                     |
+| `permissionMode`         | `'default' \| 'plan' \| 'auto-edit' \| 'yolo'` | `'default'`      | Permission mode controlling tool execution approval. See [Permission Modes](#permission-modes) for details.                                                                                                                                                                                                                                   |
+| `canUseTool`             | `CanUseTool`                                   | -                | Custom permission handler for tool execution approval. Invoked when a tool requires confirmation. Must respond within 60 seconds or the request will be auto-denied. See [Custom Permission Handler](#custom-permission-handler).                                                                                                             |
+| `baseURL`                | `string`                                       | -                | Base URL for the AI provider API. Routes requests through a custom gateway or proxy instead of calling the provider directly. Sets `OPENAI_BASE_URL` in the CLI process environment. Example: `'http://gateway:4000/v1'`.                                                                                                                     |
+| `env`                    | `Record<string, string>`                       | -                | Environment variables to pass to the proto CLI process. Merged with the current process environment.                                                                                                                                                                                                                                          |
+| `systemPrompt`           | `string \| QuerySystemPromptPreset`            | -                | System prompt configuration for the main session. Use a string to fully override the built-in protoCLI system prompt, or a preset object to keep the built-in prompt and append extra instructions.                                                                                                                                           |
+| `mcpServers`             | `Record<string, McpServerConfig>`              | -                | MCP (Model Context Protocol) servers to connect. Supports external servers (stdio/SSE/HTTP) and SDK-embedded servers. External servers are configured with transport options like `command`, `args`, `url`, `httpUrl`, etc. SDK servers use `{ type: 'sdk', name: string, instance: Server }`.                                                |
+| `abortController`        | `AbortController`                              | -                | Controller to cancel the query session. Call `abortController.abort()` to terminate the session and cleanup resources.                                                                                                                                                                                                                        |
+| `debug`                  | `boolean`                                      | `false`          | Enable debug mode for verbose logging from the CLI process.                                                                                                                                                                                                                                                                                   |
+| `maxSessionTurns`        | `number`                                       | `-1` (unlimited) | Maximum number of conversation turns before the session automatically terminates. A turn consists of a user message and an assistant response.                                                                                                                                                                                                |
+| `coreTools`              | `string[]`                                     | -                | Equivalent to `permissions.allow` in settings.json as an allowlist. If specified, only these tools will be available to the AI (all other tools are disabled at registry level). Supports tool name aliases and pattern matching. Example: `['Read', 'Edit', 'Bash(git *)']`.                                                                 |
+| `excludeTools`           | `string[]`                                     | -                | Equivalent to `permissions.deny` in settings.json. Excluded tools return a permission error immediately. Takes highest priority over all other permission settings. Supports tool name aliases and pattern matching: tool name (`'write_file'`), shell command prefix (`'Bash(rm *)'`), or path patterns (`'Read(.env)'`, `'Edit(/src/**)'`). |
+| `allowedTools`           | `string[]`                                     | -                | Equivalent to `permissions.allow` in settings.json. Matching tools bypass `canUseTool` callback and execute automatically. Only applies when tool requires confirmation. Supports same pattern matching as `excludeTools`. Example: `['ShellTool(git status)', 'ShellTool(npm test)']`.                                                       |
+| `authType`               | `'openai'`                                     | `'openai'`       | Authentication type for the AI service. Authenticates via OpenAI-compatible API using `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.                                                                                                                                                                                                                |
+| `agents`                 | `SubagentConfig[]`                             | -                | Configuration for subagents that can be invoked during the session. Subagents are specialized AI agents for specific tasks or domains.                                                                                                                                                                                                        |
+| `includePartialMessages` | `boolean`                                      | `false`          | When `true`, the SDK emits incomplete messages as they are being generated, allowing real-time streaming of the AI's response.                                                                                                                                                                                                                |
+| `resume`                 | `string`                                       | -                | Resume a previous session by providing its session ID. Equivalent to CLI's `--resume` flag.                                                                                                                                                                                                                                                   |
+| `sessionId`              | `string`                                       | -                | Specify a session ID for the new session. Ensures SDK and CLI use the same ID without resuming history. Equivalent to CLI's `--session-id` flag.                                                                                                                                                                                              |
 
 > [!tip]
-> If you need to configure `coreTools`, `excludeTools`, or `allowedTools`, it is **strongly recommended** to read the [permissions configuration documentation](../docs/users/configuration/settings.md#permissions) first, especially the **Tool name aliases** and **Rule syntax examples** sections, to understand the available aliases and pattern matching syntax (e.g., `Bash(git *)`, `Read(.env)`, `Edit(/src/**)`).
+> When configuring `coreTools`, `excludeTools`, or `allowedTools`, use tool name aliases and pattern matching syntax (e.g., `Bash(git *)`, `Read(.env)`, `Edit(/src/**)`) to target specific tools or shell commands.
 
 ### Timeouts
 
@@ -92,12 +92,15 @@ The SDK enforces the following default timeouts:
 You can customize these timeouts via the `timeout` option:
 
 ```typescript
-const query = qwen.query('Your prompt', {
-  timeout: {
-    canUseTool: 60000, // 60 seconds for permission callback
-    mcpRequest: 600000, // 10 minutes for MCP tool calls
-    controlRequest: 60000, // 60 seconds for control requests
-    streamClose: 15000, // 15 seconds for stream close wait
+const q = query({
+  prompt: 'Your prompt',
+  options: {
+    timeout: {
+      canUseTool: 60000, // 60 seconds for permission callback
+      mcpRequest: 600000, // 10 minutes for MCP tool calls
+      controlRequest: 60000, // 60 seconds for control requests
+      streamClose: 15000, // 15 seconds for stream close wait
+    },
   },
 });
 ```
@@ -144,7 +147,7 @@ await q.interrupt();
 await q.setPermissionMode('yolo');
 
 // Change model mid-session
-await q.setModel('qwen-max');
+await q.setModel('claude-sonnet-4-6');
 
 // Close the session
 await q.close();
@@ -257,6 +260,28 @@ const result = query({
 });
 ```
 
+### Route Through a Custom Gateway
+
+```typescript
+import { query } from '@proto/sdk';
+
+// Route through a gateway or proxy instead of calling the API directly
+const result = query({
+  prompt: 'What is the status of this project?',
+  options: {
+    model: 'claude-opus-4-6',
+    baseURL: 'http://gateway:4000/v1',
+    cwd: '/path/to/project',
+  },
+});
+
+for await (const message of result) {
+  if (message.type === 'result') {
+    console.log(message.result);
+  }
+}
+```
+
 ### Override the System Prompt
 
 ```typescript
@@ -279,8 +304,6 @@ const result = query({
   prompt: 'Review the current directory.',
   options: {
     systemPrompt: {
-      type: 'preset',
-      preset: 'qwen_code',
       append: 'Be terse and focus on concrete findings.',
     },
   },
@@ -412,23 +435,6 @@ try {
   }
 }
 ```
-
-## FAQ / Troubleshooting
-
-### Version 0.1.0 Requirements
-
-If you're using SDK version **0.1.0**, please note the following requirements:
-
-#### Qwen Code Installation Required
-
-Version 0.1.0 requires [Qwen Code](https://github.com/QwenLM/qwen-code) **>= 0.4.0** to be installed separately and accessible in your PATH.
-
-```bash
-# Install Qwen Code globally
-npm install -g qwen-code@^0.4.0
-```
-
-**Note**: From version **0.1.1** onwards, the CLI is bundled with the SDK, so no separate Qwen Code installation is needed.
 
 ## License
 
