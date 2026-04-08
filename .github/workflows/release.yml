@@ -105,6 +105,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Rewrite notes and post to Discord
+        if: steps.version.outputs.already_tagged != 'true'
+        run: |
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${{ steps.version.outputs.tag }}$" | head -1)
+          echo "Diffing $PREV_TAG → ${{ steps.version.outputs.tag }}"
+          node scripts/rewrite-release-notes.mjs \
+            "${{ steps.version.outputs.tag }}" \
+            "$PREV_TAG" \
+            --post-discord
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+
       - name: Alert on already-tagged
         if: steps.version.outputs.already_tagged == 'true'
         run: |
