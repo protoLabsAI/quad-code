@@ -1,25 +1,35 @@
-# Qwen Code Documentation
+# proto Documentation
 
-Welcome to the Qwen Code documentation. Qwen Code is an agentic coding tool that lives in your terminal and helps you turn ideas into code faster than ever before.
+**proto** is a multi-model AI agent for the terminal. Connect it to any OpenAI-compatible, Anthropic, or Gemini endpoint and let it read, write, and run code directly in your project.
 
-## Documentation Sections
+## Where to start
 
-### [User Guide](./users/overview)
+| I want to…                                              | Go to…                                                     |
+| ------------------------------------------------------- | ---------------------------------------------------------- |
+| Install proto and run my first session                  | [Tutorials → Getting Started](./tutorials/getting-started) |
+| Accomplish a specific task (MCP, hooks, headless, etc.) | [Guides](./guides/)                                        |
+| Look up settings, commands, or tool signatures          | [Reference](./reference/)                                  |
+| Understand how proto works under the hood               | [Explanation](./explanation/)                              |
+| Contribute to the codebase or build on the SDK          | [Contributing](./contributing/)                            |
 
-Learn how to use Qwen Code as an end user. This section covers:
+## Documentation sections
 
-- Basic installation and setup
-- Common usage patterns
-- Features and capabilities
-- Configuration options
-- Troubleshooting
+### [Tutorials](./tutorials/getting-started)
 
-### [Developer Guide](./developers/architecture)
+Step-by-step walkthroughs for learning proto from scratch. Follow along to install, configure, and run your first agentic sessions.
 
-Learn how to contribute to and develop Qwen Code. This section covers:
+### [Guides](./guides/)
 
-- Architecture overview
-- Contributing guidelines
-- Core concepts and implementation details
-- Tools and development workflow
-- Extension and plugin development
+Task-oriented how-tos for specific goals — connecting models, writing sub-agents, using hooks, running in CI, and more.
+
+### [Reference](./reference/)
+
+Exact, complete reference material: all settings keys, slash commands, keyboard shortcuts, tool signatures, and the beads task tracker CLI.
+
+### [Explanation](./explanation/)
+
+Conceptual documentation explaining how proto's subsystems work and why they are designed the way they are.
+
+### [Contributing](./contributing/)
+
+Architecture deep-dives, development workflow, SDK guides, and examples for contributors and extension builders.
