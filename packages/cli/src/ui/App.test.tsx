@@ -14,6 +14,7 @@ import {
   type UIActions,
 } from './contexts/UIActionsContext.js';
 import { AgentViewProvider } from './contexts/AgentViewContext.js';
+import { ConfigContext } from './contexts/ConfigContext.js';
 import { StreamingState } from './types.js';
 
 vi.mock('ink', async (importOriginal) => {
@@ -52,6 +53,10 @@ vi.mock('./components/agent-view/AgentTabBar.js', () => ({
   AgentTabBar: () => null,
 }));
 
+vi.mock('./components/StatusBar.js', () => ({
+  StatusBar: () => null,
+}));
+
 describe('App', () => {
   const mockUIState: Partial<UIState> = {
     streamingState: StreamingState.Idle,
@@ -71,15 +76,21 @@ describe('App', () => {
     refreshStatic: vi.fn(),
   } as unknown as UIActions;
 
+  const mockConfig = {
+    getTargetDir: () => '/mock/cwd',
+  } as unknown as import('@qwen-code/qwen-code-core').Config;
+
   const renderWithProviders = (uiState: UIState) =>
     render(
-      <UIActionsContext.Provider value={mockUIActions}>
-        <AgentViewProvider>
-          <UIStateContext.Provider value={uiState}>
-            <App />
-          </UIStateContext.Provider>
-        </AgentViewProvider>
-      </UIActionsContext.Provider>,
+      <ConfigContext.Provider value={mockConfig}>
+        <UIActionsContext.Provider value={mockUIActions}>
+          <AgentViewProvider>
+            <UIStateContext.Provider value={uiState}>
+              <App />
+            </UIStateContext.Provider>
+          </AgentViewProvider>
+        </UIActionsContext.Provider>
+      </ConfigContext.Provider>,
     );
 
   it('should render main content and composer when not quitting', () => {

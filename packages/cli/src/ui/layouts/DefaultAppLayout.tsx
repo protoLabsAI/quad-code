@@ -15,9 +15,11 @@ import { BtwMessage } from '../components/messages/BtwMessage.js';
 import { AgentTabBar } from '../components/agent-view/AgentTabBar.js';
 import { AgentChatView } from '../components/agent-view/AgentChatView.js';
 import { AgentComposer } from '../components/agent-view/AgentComposer.js';
+import { StatusBar } from '../components/StatusBar.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import { useAgentViewState } from '../contexts/AgentViewContext.js';
+import { useConfig } from '../contexts/ConfigContext.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 
 export const DefaultAppLayout: React.FC = () => {
@@ -25,6 +27,7 @@ export const DefaultAppLayout: React.FC = () => {
   const { refreshStatic } = useUIActions();
   const { activeView, agents } = useAgentViewState();
   const { columns: terminalWidth } = useTerminalSize();
+  const config = useConfig();
   const hasAgents = agents.size > 0;
   const isAgentTab = activeView !== 'main' && agents.has(activeView);
 
@@ -81,6 +84,9 @@ export const DefaultAppLayout: React.FC = () => {
 
       {/* Tab bar: visible whenever in-process agents exist and input is active */}
       {hasAgents && !uiState.dialogsVisible && <AgentTabBar />}
+
+      {/* Status bar: CWD · git branch · uncommitted diff */}
+      <StatusBar cwd={config.getTargetDir()} terminalWidth={terminalWidth} />
     </Box>
   );
 };

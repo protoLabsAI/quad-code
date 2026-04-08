@@ -386,6 +386,11 @@ export const DialogManager = ({
       const cutIdx = getUiHistoryCutIndex(promptId);
       const slicedUiHistory = uiState.history.slice(0, cutIdx);
       uiState.historyManager.loadHistory(slicedUiHistory);
+      // Clear the terminal and re-render <Static> with the sliced history so
+      // the user sees only the messages that existed at the checkpoint.
+      // Without this, Ink's <Static> has already painted the full history to
+      // the terminal scrollback and the visual rollback never happens.
+      uiActions.refreshStatic();
 
       // Slice the LLM history to match the number of user turns kept.
       const geminiClient = config?.getGeminiClient?.();
