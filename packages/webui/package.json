@@ -1,6 +1,6 @@
 {
   "name": "@qwen-code/webui",
-  "version": "0.23.1",
+  "version": "0.24.0",
   "description": "Shared UI components for proto packages",
   "type": "module",
   "main": "./dist/index.cjs",
