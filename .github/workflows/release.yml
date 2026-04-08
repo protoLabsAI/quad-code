@@ -107,6 +107,7 @@ jobs:
 
       - name: Rewrite notes and post to Discord
         if: steps.version.outputs.already_tagged != 'true'
+        continue-on-error: true
         run: |
           PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${{ steps.version.outputs.tag }}$" | head -1)
           echo "Diffing $PREV_TAG → ${{ steps.version.outputs.tag }}"

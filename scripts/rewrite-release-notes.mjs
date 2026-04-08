@@ -118,18 +118,27 @@ async function postToDiscord(version, notes) {
     ],
   };
 
-  const res = await fetch(webhook, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
+  const delays = [0, 3000, 10000];
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (delays[attempt] > 0) {
+      await new Promise((r) => setTimeout(r, delays[attempt]));
+      console.log(`Retrying Discord post (attempt ${attempt + 1})...`);
+    }
+    const res = await fetch(webhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      console.log(`Posted to Discord: ${version}`);
+      return;
+    }
     const err = await res.text();
-    throw new Error(`Discord webhook error ${res.status}: ${err}`);
+    if (attempt === delays.length - 1) {
+      throw new Error(`Discord webhook error ${res.status}: ${err}`);
+    }
+    console.warn(`Discord post failed (${res.status}), retrying...`);
   }
-
-  console.log(`Posted to Discord: ${version}`);
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
