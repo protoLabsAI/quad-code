@@ -3,6 +3,7 @@ export default {
   'configure-models': 'Configure Models & Auth',
   // --- Core agentic features ---
   'use-sub-agents': 'Use Sub-Agents',
+  'use-teams': 'Use Agent Teams',
   'use-skills': 'Use Skills',
   'use-hooks': 'Use Hooks',
   'use-mcp': 'Connect via MCP',

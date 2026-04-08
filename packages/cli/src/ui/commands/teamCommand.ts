@@ -12,6 +12,8 @@ import {
   createTeam,
   stopTeam,
   deleteTeam,
+  TeamOrchestrator,
+  teamRegistry,
 } from '@qwen-code/qwen-code-core';
 import { MessageType } from '../types.js';
 
@@ -134,15 +136,27 @@ export const teamCommand: SlashCommand = {
       kind: CommandKind.BUILT_IN,
       action: async (context): Promise<void> => {
         const projectDir = context.services.config?.getProjectRoot();
+        const coreConfig = context.services.config;
         const args = context.invocation?.args?.trim() ?? '';
         const parts = args.split(/\s+/);
         const teamName = parts[0];
 
-        if (!projectDir || !teamName) {
+        if (!projectDir || !teamName || !coreConfig) {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
               text: 'Usage: /team start <name> [member:type ...]',
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        if (teamRegistry.has(teamName)) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: `Team "${teamName}" is already running.`,
             },
             Date.now(),
           );
@@ -167,17 +181,36 @@ export const teamCommand: SlashCommand = {
                 { name: 'scout', agentType: 'Explore' },
               ];
 
-        const config = await createTeam(projectDir, teamName, members);
-        const memberList = config.members
-          .map((m) => `${m.name} (${m.agentType})`)
-          .join(', ');
-        context.ui.addItem(
-          {
-            type: MessageType.SUCCESS,
-            text: `Team "${teamName}" created with ${config.members.length} members: ${memberList}`,
-          },
-          Date.now(),
-        );
+        const teamConfig = await createTeam(projectDir, teamName, members);
+
+        try {
+          const orchestrator = await TeamOrchestrator.create(
+            projectDir,
+            coreConfig,
+            teamConfig,
+          );
+          await orchestrator.start();
+          teamRegistry.set(teamName, orchestrator);
+
+          const memberList = teamConfig.members
+            .map((m) => `${m.name} (${m.agentType})`)
+            .join(', ');
+          context.ui.addItem(
+            {
+              type: MessageType.SUCCESS,
+              text: `Team "${teamName}" started with ${teamConfig.members.length} live agents: ${memberList}`,
+            },
+            Date.now(),
+          );
+        } catch (error) {
+          context.ui.addItem(
+            {
+              type: MessageType.ERROR,
+              text: `Failed to start team "${teamName}": ${error instanceof Error ? error.message : String(error)}`,
+            },
+            Date.now(),
+          );
+        }
         return;
       },
     },
@@ -201,16 +234,24 @@ export const teamCommand: SlashCommand = {
           return;
         }
 
-        const config = await stopTeam(projectDir, teamName);
-        if (!config) {
-          context.ui.addItem(
-            {
-              type: MessageType.ERROR,
-              text: `Team "${teamName}" not found.`,
-            },
-            Date.now(),
-          );
-          return;
+        const orchestrator = teamRegistry.get(teamName);
+        if (orchestrator) {
+          // Live team — stop real processes
+          await orchestrator.stop();
+          teamRegistry.delete(teamName);
+        } else {
+          // Team exists only in config (e.g., from a previous session)
+          const config = await stopTeam(projectDir, teamName);
+          if (!config) {
+            context.ui.addItem(
+              {
+                type: MessageType.ERROR,
+                text: `Team "${teamName}" not found.`,
+              },
+              Date.now(),
+            );
+            return;
+          }
         }
 
         context.ui.addItem(

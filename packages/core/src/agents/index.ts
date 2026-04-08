@@ -18,3 +18,5 @@ export * from './arena/index.js';
 export * from './runtime/index.js';
 export * from './mailbox.js';
 export * from './team-config.js';
+export * from './TeamOrchestrator.js';
+export * from './team-registry.js';

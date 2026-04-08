@@ -151,17 +151,7 @@ Agents can run concurrently using `run_in_background: true` in the Agent tool ca
 
 ## Agent teams
 
-Teams enable coordinated multi-agent work with shared task visibility.
-
-### Team commands
-
-| Command                                | Description               |
-| -------------------------------------- | ------------------------- |
-| `/team list`                           | List all configured teams |
-| `/team start <name> [member:type ...]` | Create and start a team   |
-| `/team status <name>`                  | Show member status        |
-| `/team stop <name>`                    | Stop a running team       |
-| `/team delete <name>`                  | Delete a team config      |
+Teams run multiple coordinated agents concurrently. Each member is a live in-process agent with its own system prompt and tools, plus two extras injected automatically: `mailbox_send` and `mailbox_receive` for direct peer-to-peer messaging.
 
 ```
 /team start research researcher:Explore implementer:general-purpose
@@ -169,13 +159,25 @@ Teams enable coordinated multi-agent work with shared task visibility.
 
 Default team (no members specified): `lead` (coordinator) + `scout` (Explore).
 
+### Team commands
+
+| Command                                | Description                           |
+| -------------------------------------- | ------------------------------------- |
+| `/team start <name> [member:type ...]` | Spawn live agents and start the team  |
+| `/team status <name>`                  | Show live member status               |
+| `/team stop <name>`                    | Kill all agents and release resources |
+| `/team list`                           | List all teams in the project         |
+| `/team delete <name>`                  | Delete a team's config directory      |
+
 ### Shared task list
 
-Teammates share task visibility — they can claim available tasks and track ownership.
+All team members share the same task list. Members can create, claim, and update tasks using the standard task tools (`task_create`, `task_list`, `task_update`).
 
 ### Inter-agent messaging
 
-Teammates communicate directly via `TeamMailbox`. See [Guides → Use Hooks](./use-hooks#team-events) for the hook events that fire during coordination.
+Each agent gets `mailbox_send` and `mailbox_receive` tools at spawn time. Agents address each other by agentId (`<name>-<index>`, e.g. `lead-0`, `scout-1`).
+
+See [Guides → Use Agent Teams](./use-teams) for the full reference including message patterns, status tracking, hooks integration, and implementation details.
 
 ## Management commands
 

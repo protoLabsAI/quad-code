@@ -396,6 +396,47 @@ browser({ action: 'screenshot', outputPath: '/path/to/screenshot.png' });
 
 The browser skill (`/skills` → browser-automation) provides comprehensive documentation for all 38 available actions.
 
+## Agent Teams
+
+Run multiple coordinated agents that share tasks and communicate directly with each other.
+
+```
+/team start my-team lead:coordinator scout:Explore coder:general-purpose
+```
+
+This spawns three live agents immediately. Each member runs as an in-process agent and gets two extra tools injected automatically:
+
+- **`mailbox_send`** — send a message to a teammate by their agentId
+- **`mailbox_receive`** — drain all unread messages from your inbox
+
+Members share the same task list (`task_create`, `task_list`, `task_update`) so any agent can create tasks and others can claim them.
+
+### Team commands
+
+| Command                                | Description                           |
+| -------------------------------------- | ------------------------------------- |
+| `/team start <name> [member:type ...]` | Spawn live agents and start the team  |
+| `/team status <name>`                  | Show live member status               |
+| `/team stop <name>`                    | Kill all agents and release resources |
+| `/team list`                           | List all teams in the project         |
+| `/team delete <name>`                  | Delete a team config                  |
+
+**Default team** (no members specified): `lead` (coordinator) + `scout` (Explore).
+
+Agent IDs follow the pattern `<name>-<index>` (e.g. `lead-0`, `scout-1`). Use these when sending mailbox messages between agents.
+
+### Member types
+
+| Type              | Purpose                                   |
+| ----------------- | ----------------------------------------- |
+| `coordinator`     | Orchestrate subtasks across other members |
+| `Explore`         | Fast codebase search and analysis         |
+| `general-purpose` | Multi-step implementation tasks           |
+| `verify`          | Review and correctness checking           |
+| `plan`            | Design plans before implementation        |
+
+Any user-defined sub-agent from `.proto/agents/` can also be used as a member type.
+
 ## Commands
 
 | Command                 | Description                               |
