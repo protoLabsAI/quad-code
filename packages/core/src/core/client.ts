@@ -80,7 +80,7 @@ import { promptIdContext } from '../utils/promptIdContext.js';
 import { retryWithBackoff } from '../utils/retry.js';
 
 // Checkpoint store for rewind support
-import { checkpointStore } from './agentCore.js';
+import { checkpointStore, beginTurn } from './agentCore.js';
 
 // Hook types and utilities
 import {
@@ -634,6 +634,29 @@ export class GeminiClient {
       // injection and before the user message is appended, so
       // trimHistoryToCheckpoint() can restore the history to this exact state.
       this.turnHistoryLengths.set(prompt_id, this.getHistory().length);
+
+      // Register a main-thread checkpoint so the RewindPicker can surface
+      // this turn. Extract user-visible text from the request; tool-result
+      // continuations (ToolResult / Retry type) are skipped intentionally —
+      // only genuine user queries appear in the rewind list.
+      if (
+        messageType === SendMessageType.UserQuery ||
+        messageType === SendMessageType.Cron
+      ) {
+        const userText =
+          typeof request === 'string'
+            ? request
+            : Array.isArray(request)
+              ? request
+                  .map((p) =>
+                    typeof p === 'string'
+                      ? p
+                      : ((p as { text?: string }).text ?? ''),
+                  )
+                  .join('')
+              : '';
+        beginTurn(prompt_id, userText.trim());
+      }
     }
     if (messageType !== SendMessageType.Retry) {
       this.sessionTurnCount++;

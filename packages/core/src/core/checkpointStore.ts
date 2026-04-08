@@ -156,6 +156,24 @@ export class CheckpointStore {
   }
 
   /**
+   * Returns only main-thread checkpoints — those whose promptId was created
+   * by the main session (format: `"sessionId########counter"`).
+   *
+   * Subagent checkpoints use a single `#` separator
+   * (`"sessionId#agentName-random#counter"`) and are excluded.
+   *
+   * Also filters out entries with empty userPrompt (defensive guard against
+   * internal turns that captured no meaningful user text).
+   */
+  listMainThread(): Checkpoint[] {
+    return this.checkpoints
+      .filter(
+        (c) => c.promptId.includes('########') && c.userPrompt.trim() !== '',
+      )
+      .map(toPublic);
+  }
+
+  /**
    * Returns the checkpoint at the given (zero-based) index.
    *
    * Negative indices count from the end (Python-style), so `-1` is the

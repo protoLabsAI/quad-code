@@ -94,9 +94,10 @@ export function RewindPicker({
 }: RewindPickerProps) {
   const { columns: width, rows: height } = useTerminalSize();
 
-  // All checkpoints in reverse chronological order (most-recent first).
+  // Main-thread checkpoints only, in reverse chronological order (most-recent first).
+  // Subagent checkpoints (internal turns, empty prompts) are excluded.
   const checkpoints: Checkpoint[] = useMemo(
-    () => checkpointStore.list().slice().reverse(),
+    () => checkpointStore.listMainThread().slice().reverse(),
     [],
   );
 

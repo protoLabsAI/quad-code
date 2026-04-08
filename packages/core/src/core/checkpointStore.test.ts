@@ -92,6 +92,42 @@ describe('CheckpointStore', () => {
 
   // ── list() ─────────────────────────────────────────────────────────────────
 
+  describe('listMainThread()', () => {
+    const MAIN_ID_0 = 'sess########0';
+    const MAIN_ID_1 = 'sess########1';
+    const AGENT_ID_0 = 'sess#general-purpose-abc123#0';
+    const AGENT_ID_1 = 'sess#general-purpose-abc123#1';
+
+    it('returns empty array when no main-thread checkpoints exist', () => {
+      store.add(AGENT_ID_0, 'subagent task');
+      expect(store.listMainThread()).toEqual([]);
+    });
+
+    it('returns only checkpoints whose promptId contains ########', () => {
+      store.add(MAIN_ID_0, 'hello from user');
+      store.add(AGENT_ID_0, 'subagent internal turn');
+      store.add(MAIN_ID_1, 'second user message');
+      store.add(AGENT_ID_1, '');
+
+      const ids = store.listMainThread().map((c) => c.promptId);
+      expect(ids).toEqual([MAIN_ID_0, MAIN_ID_1]);
+    });
+
+    it('excludes entries with empty or whitespace-only userPrompt', () => {
+      store.add(MAIN_ID_0, '   ');
+      store.add(MAIN_ID_1, 'actual message');
+      const prompts = store.listMainThread().map((c) => c.userPrompt);
+      expect(prompts).toEqual(['actual message']);
+    });
+
+    it('returns a shallow copy', () => {
+      store.add(MAIN_ID_0, 'hello');
+      const list = store.listMainThread();
+      list.pop();
+      expect(store.size).toBe(1);
+    });
+  });
+
   describe('list()', () => {
     it('returns an empty array when the store is empty', () => {
       expect(store.list()).toEqual([]);

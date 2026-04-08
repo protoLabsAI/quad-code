@@ -1,0 +1,20 @@
+{
+  "name": "proto-sdk-examples",
+  "version": "0.0.1",
+  "description": "Runnable examples for the proto SDK",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "01": "tsx 01-basic-query/index.ts",
+    "02": "tsx 02-code-reviewer/index.ts",
+    "03": "tsx 03-multi-agent-pipeline/index.ts",
+    "04": "tsx 04-hook-security-gate/index.ts"
+  },
+  "dependencies": {
+    "@proto/sdk": "*"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
+  }
+}
