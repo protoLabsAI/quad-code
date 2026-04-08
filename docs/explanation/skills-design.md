@@ -56,7 +56,7 @@ This is a common source of bugs in user-written skills — always use absolute p
 
 ## Bundled skills
 
-proto ships with 18+ bundled skills covering common agentic workflows: `adversarial-verification`, `brainstorming`, `coding-agent-standards`, `sprint-contract`, `test-driven-development`, and more. These are always available regardless of project or user configuration.
+proto ships with 19+ bundled skills covering common agentic workflows: `adversarial-verification`, `brainstorming`, `browser-automation`, `coding-agent-standards`, `sprint-contract`, `test-driven-development`, and more. These are always available regardless of project or user configuration.
 
 ## Why this design
 

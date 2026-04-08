@@ -23,6 +23,7 @@ proto's built-in tools are the functions the model calls to interact with your l
 | [Web Fetch](./web-fetch)           | `web_fetch`                                                                                     |
 | [Web Search](./web-search)         | `web_search`                                                                                    |
 | [Memory](./memory)                 | `save_memory`                                                                                   |
+| [Browser](./browser)               | `browser` — Web browser automation (requires `agent-browser`)                                   |
 | [MCP Servers](./mcp-server)        | Dynamic tools from connected MCP servers                                                        |
 | [Sandbox](./sandbox)               | Isolation for shell and file tools                                                              |
 

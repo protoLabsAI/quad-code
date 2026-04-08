@@ -67,6 +67,9 @@ export enum ToolErrorType {
   // WebSearch-specific Errors
   WEB_SEARCH_FAILED = 'web_search_failed',
 
+  // Browser-specific Errors
+  BROWSER_TOOL_ERROR = 'browser_tool_error',
+
   // Truncation Errors
   OUTPUT_TRUNCATED = 'output_truncated',
 }

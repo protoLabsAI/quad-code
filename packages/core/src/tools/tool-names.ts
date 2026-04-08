@@ -36,6 +36,7 @@ export const ToolNames = {
   CRON_LIST: 'cron_list',
   CRON_DELETE: 'cron_delete',
   REPO_MAP: 'repo_map',
+  BROWSER: 'browser',
 } as const;
 
 /**
@@ -70,6 +71,7 @@ export const ToolDisplayNames = {
   CRON_LIST: 'CronList',
   CRON_DELETE: 'CronDelete',
   REPO_MAP: 'RepoMap',
+  BROWSER: 'Browser',
 } as const;
 
 // Migration from old tool names to new tool names

@@ -75,6 +75,7 @@ import { RepoMapTool } from '../tools/repoMap.js';
 import { CronCreateTool } from '../tools/cron-create.js';
 import { CronListTool } from '../tools/cron-list.js';
 import { CronDeleteTool } from '../tools/cron-delete.js';
+import { BrowserTool } from '../tools/browser-tool.js';
 import type { LspClient } from '../lsp/types.js';
 
 // Other modules
@@ -2333,6 +2334,9 @@ export class Config {
       await registerCoreTool(CronListTool, this);
       await registerCoreTool(CronDeleteTool, this);
     }
+
+    // Register browser automation tool
+    await registerCoreTool(BrowserTool, this);
 
     if (!options?.skipDiscovery) {
       await registry.discoverAllTools();

@@ -329,8 +329,9 @@ Results are cached at `.proto/repo-map-cache.json` and auto-invalidate on file c
 
 ## Skills
 
-proto ships with 21 bundled skills for agentic workflows:
+proto ships with 22 bundled skills for agentic workflows:
 
+- **browser-automation** — Web browser automation
 - **brainstorming** — Structured ideation
 - **dispatching-parallel-agents** — Fan-out/fan-in subagent patterns
 - **executing-plans** — Step-by-step plan execution
@@ -349,6 +350,51 @@ proto ships with 21 bundled skills for agentic workflows:
 - **writing-skills** — Skill authoring
 
 Use `/skills` to list available skills in a session.
+
+### Browser Automation
+
+proto includes a native browser automation tool powered by [agent-browser](https://github.com/nickinack/agent-browser). This enables AI agents to interact with websites — navigate, click, fill forms, take screenshots, and extract content.
+
+#### Installation
+
+```bash
+npm install -g agent-browser
+agent-browser install  # Downloads Chrome
+```
+
+#### Usage
+
+```javascript
+// Open a website
+browser({ action: 'open', url: 'https://example.com' });
+
+// Get interactive elements
+browser({ action: 'snapshot', flags: JSON.stringify({ interactive: true }) });
+
+// Click an element
+browser({ action: 'click', selector: '@e2' });
+
+// Fill a form
+browser({ action: 'fill', selector: '@e1', text: 'user@example.com' });
+
+// Take screenshot
+browser({ action: 'screenshot', outputPath: '/path/to/screenshot.png' });
+```
+
+#### Key Actions
+
+| Action                         | Description                                |
+| ------------------------------ | ------------------------------------------ |
+| `open` / `close`               | Navigate to URL or close browser           |
+| `click` / `dblclick` / `hover` | Element interaction                        |
+| `fill` / `type`                | Form input                                 |
+| `snapshot`                     | Get accessibility tree with element refs   |
+| `screenshot`                   | Capture page screenshot                    |
+| `get` / `is` / `find`          | Query element properties                   |
+| `wait`                         | Wait for elements, network, or URL changes |
+| `batch`                        | Execute multiple commands in sequence      |
+
+The browser skill (`/skills` → browser-automation) provides comprehensive documentation for all 38 available actions.
 
 ## Commands
 
