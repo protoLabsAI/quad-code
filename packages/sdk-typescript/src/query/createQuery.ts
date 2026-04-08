@@ -61,7 +61,9 @@ export function query({
     cwd: options.cwd,
     model: options.model,
     permissionMode: options.permissionMode,
-    env: options.env,
+    env: options.baseURL
+      ? { OPENAI_BASE_URL: options.baseURL, ...options.env }
+      : options.env,
     ...resolvedSystemPrompt,
     abortController,
     debug: options.debug,

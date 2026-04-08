@@ -20,7 +20,7 @@ import {
   type ToolUseBlock,
   type SDKSystemMessage,
   type SDKUserMessage,
-} from '@qwen-code/sdk';
+} from '@proto/sdk';
 import {
   SDKTestHelper,
   createMCPServer,

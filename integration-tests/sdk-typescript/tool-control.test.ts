@@ -18,7 +18,7 @@ import {
   isSDKResultMessage,
   type SDKMessage,
   type SDKUserMessage,
-} from '@qwen-code/sdk';
+} from '@proto/sdk';
 import {
   SDKTestHelper,
   extractText,

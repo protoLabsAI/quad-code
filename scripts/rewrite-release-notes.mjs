@@ -60,10 +60,13 @@ function buildUserPrompt(version, previousVersion, commits) {
 
   const bulletList = filtered.map((c) => `- ${c}`).join('\n');
 
-  return `Write release notes for ${version} (previous: ${previousVersion}).
+  return {
+    prompt: `Write release notes for ${version} (previous: ${previousVersion}).
 
 Raw commits:
-${bulletList}`;
+${bulletList}`,
+    filteredCount: filtered.length,
+  };
 }
 
 // ─── Claude API ──────────────────────────────────────────────────────────────
@@ -167,11 +170,17 @@ console.log(`Generating release notes: ${previousVersion} → ${version}`);
 const commits = getCommitsBetween(previousVersion, version);
 console.log(`Found ${commits.length} commits`);
 
-const userPrompt = buildUserPrompt(version, previousVersion, commits);
+const { prompt: userPrompt, filteredCount } = buildUserPrompt(version, previousVersion, commits);
 
 if (dryRun) {
   console.log('\n── System Prompt ──\n', SYSTEM_PROMPT);
   console.log('\n── User Prompt ──\n', userPrompt);
+  process.exit(0);
+}
+
+// Skip if all commits were filtered out (maintenance releases, CI-only changes)
+if (filteredCount === 0) {
+  console.log('No user-facing commits — skipping Discord post.');
   process.exit(0);
 }
 

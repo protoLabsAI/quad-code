@@ -1,7 +1,7 @@
 {
-  "name": "@qwen-code/sdk",
+  "name": "@proto/sdk",
   "version": "0.2.0",
-  "description": "TypeScript SDK for programmatic access to qwen-code CLI",
+  "description": "TypeScript SDK for programmatic access to protoCLI",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

@@ -312,8 +312,22 @@ export interface QueryOptions {
   pathToQwenExecutable?: string;
 
   /**
-   * Environment variables to pass to the Qwen CLI process.
+   * Base URL for the AI provider API endpoint.
+   * Use this to route requests through a custom gateway or proxy instead of
+   * calling the provider directly.
+   *
+   * Sets `OPENAI_BASE_URL` in the CLI process environment, which the CLI
+   * respects for all OpenAI-compatible providers.
+   *
+   * @example 'http://gateway:4000/v1'
+   * @example 'https://my-proxy.example.com/openai/v1'
+   */
+  baseURL?: string;
+
+  /**
+   * Environment variables to pass to the proto CLI process.
    * These variables will be merged with the current process environment.
+   * Use `baseURL` as a convenience for setting `OPENAI_BASE_URL`.
    */
   env?: Record<string, string>;
 

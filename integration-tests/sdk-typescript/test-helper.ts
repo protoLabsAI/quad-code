@@ -21,12 +21,12 @@ import type {
   ContentBlock,
   TextBlock,
   ToolUseBlock,
-} from '@qwen-code/sdk';
+} from '@proto/sdk';
 import {
   isSDKAssistantMessage,
   isSDKSystemMessage,
   isSDKResultMessage,
-} from '@qwen-code/sdk';
+} from '@proto/sdk';
 
 // ============================================================================
 // Core Test Helper Class
