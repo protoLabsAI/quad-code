@@ -283,8 +283,9 @@ describe('BrowserTool', () => {
       const child = new EventEmitter();
       const stdout = new EventEmitter();
       const stderr = new EventEmitter();
-      (child as unknown as Record<string, unknown>).stdout = stdout;
-      (child as unknown as Record<string, unknown>).stderr = stderr;
+      const c = child as unknown as Record<string, unknown>;
+      c['stdout'] = stdout;
+      c['stderr'] = stderr;
       mockSpawn.mockReturnValueOnce(
         child as unknown as ReturnType<typeof spawn>,
       );
