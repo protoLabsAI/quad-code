@@ -43,9 +43,8 @@ if (!fs.existsSync(vendorDir)) {
 
 const bundledDocsDir = path.join(distDir, 'bundled', 'qc-helper', 'docs');
 if (!fs.existsSync(bundledDocsDir)) {
-  console.error(`Error: Bundled docs not found at ${bundledDocsDir}`);
-  console.error('Please run "npm run bundle" first');
-  process.exit(1);
+  console.warn(`Warning: Bundled docs not found at ${bundledDocsDir}`);
+  console.warn('qc-helper skill will be published without bundled docs.');
 }
 
 // Copy README and LICENSE
