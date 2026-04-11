@@ -294,7 +294,7 @@ export default tseslint.config(
   },
   // Settings for docs-site directory
   {
-    files: ['docs-site/**/*.{js,jsx}'],
+    files: ['docs-site/**/*.{js,jsx,mjs,cjs}'],
     languageOptions: {
       globals: {
         ...globals.browser,
