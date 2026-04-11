@@ -44,10 +44,11 @@ describe('TodoDisplay', () => {
 
     const output = lastFrame();
 
-    // Check status icons are present
-    expect(output).toContain('●'); // completed
-    expect(output).toContain('◐'); // in_progress
-    expect(output).toContain('○'); // pending
+    // Check status icons are present. TodoDisplay was updated to match
+    // Claude Code's task list style (feat: update TodoDisplay to match
+    // CC task list style) — ✓ for completed, □ for pending/in_progress.
+    expect(output).toContain('✓'); // completed
+    expect(output).toContain('□'); // pending / in_progress
   });
 
   it('should handle empty todo list', () => {
