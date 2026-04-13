@@ -2,7 +2,9 @@ name: 'Auto Release'
 
 # Triggers after CI passes on main. Reads conventional commits since the last
 # tag, determines the bump type (major/minor/patch), bumps all workspace
-# versions, commits, and pushes — which triggers release.yml to publish.
+# versions, creates a PR with the version bump, and enables auto-merge.
+# When the PR's required status checks pass, it merges automatically,
+# which triggers release.yml to publish.
 #
 # Skips automatically if:
 #   - All commits since last tag are release commits ("chore: release v*")
@@ -30,6 +32,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -93,11 +96,30 @@ jobs:
         id: version
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
-      - name: Commit and push
+      - name: Create release PR
         if: >-
           steps.bump.outputs.type != 'skip' &&
           steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BRANCH="auto-release/v${VERSION}"
+
+          # Create a branch, commit the version bump, push, and open a PR
+          git checkout -b "${BRANCH}"
           git add package.json package-lock.json packages/*/package.json
-          git commit -m "chore: release v${{ steps.version.outputs.version }}"
-          git push https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git main
+          git commit -m "chore: release v${VERSION}"
+          git push origin "${BRANCH}"
+
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "${BRANCH}" \
+            --title "chore: release v${VERSION}" \
+            --body "Automated version bump to v${VERSION} (${{ steps.bump.outputs.type }})." \
+          )
+          echo "Created PR: ${PR_URL}"
+
+          # Enable auto-merge so it merges once required status checks pass
+          gh pr merge "${PR_URL}" --auto --squash
+          echo "Auto-merge enabled on ${PR_URL}"

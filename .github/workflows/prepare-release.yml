@@ -1,9 +1,9 @@
 name: 'Prepare Release'
 
-# Bumps version on main and commits it. When the commit lands, release.yml
-# picks it up automatically via commit message filter.
+# Bumps version on main via a PR with auto-merge. When the PR merges,
+# release.yml picks up the commit automatically via commit message filter.
 #
-# Usage: Actions → Prepare Release → Run workflow → pick bump type
+# Usage: Actions -> Prepare Release -> Run workflow -> pick bump type
 
 on:
   workflow_dispatch:
@@ -31,6 +31,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -69,9 +70,26 @@ jobs:
           echo ""
           echo "New version: v${{ steps.version.outputs.version }}"
 
-      - name: Commit and push
+      - name: Create release PR
         if: inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BRANCH="prepare-release/v${VERSION}"
+
+          git checkout -b "${BRANCH}"
           git add package.json package-lock.json packages/*/package.json
-          git commit -m "chore: release v${{ steps.version.outputs.version }}"
-          git push origin main
+          git commit -m "chore: release v${VERSION}"
+          git push origin "${BRANCH}"
+
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "${BRANCH}" \
+            --title "chore: release v${VERSION}" \
+            --body "Manual version bump to v${VERSION} (${{ github.event.inputs.bump }})." \
+          )
+          echo "Created PR: ${PR_URL}"
+
+          gh pr merge "${PR_URL}" --auto --squash
+          echo "Auto-merge enabled on ${PR_URL}"
