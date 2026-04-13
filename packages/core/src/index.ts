@@ -139,6 +139,8 @@ export type {
   MultiSampleConfig,
 } from './services/multiSampleSelector.js';
 export * from './services/sessionNotes.js';
+export * from './services/sessionMemory/index.js';
+export * from './services/microcompact.js';
 export * from './services/scopeLock.js';
 export * from './services/sprintContractService.js';
 export { HarnessReminderService } from './services/harnessReminderService.js';

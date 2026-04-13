@@ -7,6 +7,15 @@
 import { useState, useRef, useCallback } from 'react';
 import type { HistoryItem } from '../types.js';
 
+/**
+ * Maximum number of history items to retain in React state.
+ * Items beyond this cap are pruned from the front — they have already been
+ * printed to the terminal by Ink's Static and do not need to be reconciled.
+ * Must be >= STATIC_HISTORY_WINDOW (200) in MainContent.tsx so the render
+ * window always has items available.
+ */
+const MAX_HISTORY_ITEMS = 500;
+
 // Type for the updater function passed to updateHistoryItem
 type HistoryItemUpdater = (
   prevItem: HistoryItem,
@@ -61,7 +70,13 @@ export function useHistory(): UseHistoryManagerReturn {
             return prevHistory; // Don't add the duplicate
           }
         }
-        return [...prevHistory, newItem];
+        const next = [...prevHistory, newItem];
+        // Prune the oldest items once the cap is exceeded.  Items that are
+        // removed have already been committed to the terminal by Ink's Static
+        // and no longer need to live in React state.
+        return next.length > MAX_HISTORY_ITEMS
+          ? next.slice(-MAX_HISTORY_ITEMS)
+          : next;
       });
       return id; // Return the generated ID (even if not added, to keep signature)
     },

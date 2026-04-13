@@ -19,6 +19,19 @@ import { logChatCompression } from '../telemetry/loggers.js';
 import { makeChatCompressionEvent } from '../telemetry/types.js';
 import type { PermissionMode } from '../hooks/types.js';
 import { SessionStartSource, PreCompactTrigger } from '../hooks/types.js';
+import { readSessionNotes } from './sessionNotes.js';
+import {
+  waitForExtraction,
+  getLastSummarizedCursorIndex,
+} from './sessionMemory/sessionMemoryUtils.js';
+import {
+  isSessionNotesEmpty,
+  truncateNotesForCompact,
+} from './sessionMemory/prompts.js';
+import {
+  applyMicrocompact,
+  estimateMicrocompactSaving,
+} from './microcompact.js';
 
 /**
  * Threshold for compression token count as a fraction of the model's token limit.
@@ -245,6 +258,41 @@ export class ChatCompressionService {
         };
       }
     }
+
+    // --- Session Memory fast path ---
+    // If background extraction has populated session-notes.md, use it as the
+    // summary instead of making a fresh LLM call. Falls through to LLM compression
+    // when notes are absent or still match the empty template.
+    if (!force) {
+      const smResult = await this.trySessionMemoryCompaction(
+        curatedHistory,
+        originalTokenCount,
+        config,
+      );
+      if (smResult) return smResult;
+    }
+    // --- end SM path ---
+
+    // --- Microcompact fast path ---
+    // Clear tool-result bodies from old history entries — no LLM call required.
+    // Only fires when it would save ≥ 20 % of tokens (tool-heavy sessions).
+    if (!force) {
+      const saving = estimateMicrocompactSaving(curatedHistory);
+      if (saving >= 0.2) {
+        const { newHistory: microHistory } = applyMicrocompact(curatedHistory);
+        const newTokenCount = Math.round(originalTokenCount * (1 - saving));
+        uiTelemetryService.setLastPromptTokenCount(newTokenCount);
+        return {
+          newHistory: microHistory,
+          info: {
+            originalTokenCount,
+            newTokenCount,
+            compressionStatus: CompressionStatus.COMPRESSED,
+          },
+        };
+      }
+    }
+    // --- end microcompact path ---
 
     // Fire PreCompact hook before compression begins
     const hookSystem = config.getHookSystem();
@@ -676,4 +724,138 @@ export class ChatCompressionService {
       };
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Session Memory fast-path compaction
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Attempt to compact using the continuously-maintained session notes file
+   * instead of making a fresh LLM summarisation call.
+   *
+   * Returns null when the notes are absent, empty, or would not meaningfully
+   * reduce the context (≥ 90 % of original tokens), causing the caller to fall
+   * through to the normal LLM compression pipeline.
+   */
+  private async trySessionMemoryCompaction(
+    history: Content[],
+    originalTokenCount: number,
+    config: Config,
+  ): Promise<{
+    newHistory: Content[] | null;
+    info: ChatCompressionInfo;
+  } | null> {
+    try {
+      // Wait for any in-progress background extraction (max 15 s)
+      await waitForExtraction();
+
+      const projectDir = config.getProjectRoot();
+      const notes = await readSessionNotes(projectDir);
+
+      if (!notes || isSessionNotesEmpty(notes)) return null;
+
+      const { truncated, wasTruncated } = truncateNotesForCompact(notes);
+
+      // Build the summary preamble that replaces the compressed history
+      const summaryText =
+        `[SESSION_MEMORY_SUMMARY]\n` +
+        `The following is a running summary of this conversation maintained by the session memory agent.\n` +
+        (wasTruncated
+          ? `(Some sections were truncated for length. Full notes at ${config.getProjectRoot()}/.proto/session-notes.md)\n`
+          : '') +
+        `\n${truncated}`;
+
+      // Determine the preserved tail: start just after the last summarized
+      // cursor, then expand backwards until we have ≥ 10 000 estimated tokens.
+      const MIN_PRESERVED_TOKENS = 10_000;
+      const lastSummarized = getLastSummarizedCursorIndex();
+      let keepFromIndex =
+        lastSummarized >= 0 ? lastSummarized + 1 : history.length;
+
+      // Expand backwards to meet the minimum preserved token budget
+      let preservedTokens = estimateHistoryTokens(history.slice(keepFromIndex));
+      while (keepFromIndex > 0 && preservedTokens < MIN_PRESERVED_TOKENS) {
+        keepFromIndex--;
+        preservedTokens += estimateHistoryTokens([history[keepFromIndex]!]);
+      }
+
+      // Adjust to avoid splitting a tool call / response pair
+      keepFromIndex = adjustIndexForToolPairs(history, keepFromIndex);
+
+      const preservedTail = history.slice(keepFromIndex);
+
+      const summaryUserMsg: Content = {
+        role: 'user',
+        parts: [{ text: summaryText }],
+      };
+      const summaryAckMsg: Content = {
+        role: 'model',
+        parts: [
+          {
+            text: 'Understood. I have the session summary and will continue from the current state.',
+          },
+        ],
+      };
+
+      const newHistory = [summaryUserMsg, summaryAckMsg, ...preservedTail];
+      const newTokenCount = estimateHistoryTokens(newHistory);
+
+      // Not beneficial — would barely reduce tokens
+      if (newTokenCount >= originalTokenCount * 0.9) return null;
+
+      return {
+        newHistory,
+        info: {
+          originalTokenCount,
+          newTokenCount,
+          compressionStatus: CompressionStatus.COMPRESSED,
+        },
+      };
+    } catch {
+      // Best-effort — never block the normal compression path
+      return null;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Rough token estimate for a history array: sum of serialised char lengths / 4.
+ */
+function estimateHistoryTokens(history: Content[]): number {
+  return Math.ceil(
+    history.reduce((sum, entry) => sum + JSON.stringify(entry).length, 0) / 4,
+  );
+}
+
+/**
+ * Walk `keepFromIndex` backwards until it lands on a safe split point where
+ * no tool call is left without its matching response (or vice-versa).
+ */
+function adjustIndexForToolPairs(
+  history: Content[],
+  startIndex: number,
+): number {
+  let idx = startIndex;
+  while (idx > 0) {
+    const msg = history[idx];
+    if (!msg) break;
+
+    // Safe split: user message with no functionResponse parts, or model with no functionCall parts
+    const isUserWithNoResponse =
+      msg.role === 'user' &&
+      !(msg.parts ?? []).some((p) => 'functionResponse' in p);
+    const isModelWithNoCall =
+      msg.role === 'model' &&
+      !(msg.parts ?? []).some((p) => 'functionCall' in p);
+
+    if (isUserWithNoResponse || isModelWithNoCall) break;
+
+    // Unsafe split — back up one more
+    idx--;
+  }
+  return idx;
 }

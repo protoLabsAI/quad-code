@@ -227,6 +227,30 @@ export interface BugCommandSettings {
 
 export interface ChatCompressionSettings {
   contextPercentageThreshold?: number;
+  /**
+   * Whether to run microcompact (tool-result clearing) on a timer even when
+   * the token threshold has not been breached. Default: true.
+   */
+  timeBasedMicrocompact?: boolean;
+  /**
+   * How often to run timed microcompact in milliseconds. Default: 10 minutes.
+   */
+  timeBasedMicrocompactIntervalMs?: number;
+}
+
+export interface SessionMemorySettings {
+  /** Whether the background session memory agent is enabled. Default: true. */
+  enabled?: boolean;
+  /**
+   * Minimum total context-window tokens before the first extraction fires.
+   * Default: 10 000.
+   */
+  minimumTokensToInit?: number;
+  /**
+   * Minimum token growth since the last extraction before a new one fires.
+   * Default: 5 000.
+   */
+  minimumTokensBetweenUpdates?: number;
 }
 
 export interface TelemetrySettings {
@@ -444,6 +468,7 @@ export interface ConfigParameters {
     default: string;
   };
   chatCompression?: ChatCompressionSettings;
+  sessionMemory?: SessionMemorySettings;
   interactive?: boolean;
   trustedFolder?: boolean;
   defaultFileEncoding?: FileEncodingType;
@@ -616,6 +641,7 @@ export class Config {
     default: string;
   };
   private readonly chatCompression: ChatCompressionSettings | undefined;
+  private readonly sessionMemory: SessionMemorySettings | undefined;
   private readonly interactive: boolean;
   private readonly trustedFolder: boolean | undefined;
   private readonly useRipgrep: boolean;
@@ -745,6 +771,7 @@ export class Config {
       params.loadMemoryFromIncludeDirectories ?? false;
     this.importFormat = params.importFormat ?? 'tree';
     this.chatCompression = params.chatCompression;
+    this.sessionMemory = params.sessionMemory;
     this.interactive = params.interactive ?? false;
     this.trustedFolder = params.trustedFolder;
     this.skipLoopDetection = params.skipLoopDetection ?? false;
@@ -2068,6 +2095,10 @@ export class Config {
 
   getChatCompression(): ChatCompressionSettings | undefined {
     return this.chatCompression;
+  }
+
+  getSessionMemory(): SessionMemorySettings | undefined {
+    return this.sessionMemory;
   }
 
   isInteractive(): boolean {
