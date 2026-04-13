@@ -10,6 +10,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { useGitBranchName } from '../hooks/useGitBranchName.js';
 import { useGitDiffStat } from '../hooks/useGitDiffStat.js';
+import { useSessionMemoryStatus } from '../hooks/useSessionMemoryStatus.js';
 import { theme } from '../semantic-colors.js';
 
 // ─── Badge ────────────────────────────────────────────────────────────────────
@@ -63,6 +64,7 @@ interface StatusBarProps {
 export const StatusBar = ({ cwd, terminalWidth }: StatusBarProps) => {
   const branch = useGitBranchName(cwd);
   const diff = useGitDiffStat(cwd);
+  const { isExtracting } = useSessionMemoryStatus();
 
   const cwdDisplay = tildify(path.resolve(cwd));
 
@@ -86,6 +88,16 @@ export const StatusBar = ({ cwd, terminalWidth }: StatusBarProps) => {
       <Text color={theme.text.accent} bold>
         ⟡
       </Text>
+
+      {/* Session memory extraction indicator */}
+      {isExtracting && (
+        <>
+          <Sep />
+          <Badge>
+            <Text color={theme.text.secondary}>↺ notes</Text>
+          </Badge>
+        </>
+      )}
 
       {hasDiff && (
         <>

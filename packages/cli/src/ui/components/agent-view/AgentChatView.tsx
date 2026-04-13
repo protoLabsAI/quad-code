@@ -42,6 +42,11 @@ import { GeminiRespondingSpinner } from '../GeminiRespondingSpinner.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { agentMessagesToHistoryItems } from './agentHistoryAdapter.js';
 import { AgentHeader } from './AgentHeader.js';
+import { TruncatedHistoryBanner } from '../TruncatedHistoryBanner.js';
+
+// How many committed items to keep in the Static render window.
+// Mirrors STATIC_HISTORY_WINDOW in MainContent.tsx.
+const AGENT_STATIC_HISTORY_WINDOW = 200;
 
 // ─── Main Component ─────────────────────────────────────────
 
@@ -200,6 +205,56 @@ export const AgentChatView = ({ agentId }: AgentChatViewProps) => {
     [agentId],
   );
 
+  const agentModelId = core?.modelConfig.model ?? '';
+
+  // Build the Static items array. Must be called unconditionally (before any
+  // early return) to satisfy the Rules of Hooks.
+  const staticItems = useMemo(() => {
+    const truncatedCount = Math.max(
+      0,
+      committedItems.length - AGENT_STATIC_HISTORY_WINDOW,
+    );
+    const visibleItems =
+      truncatedCount > 0
+        ? committedItems.slice(-AGENT_STATIC_HISTORY_WINDOW)
+        : committedItems;
+
+    return [
+      <AgentHeader
+        key="agent-header"
+        modelId={agentModelId}
+        modelName={agent?.modelName ?? ''}
+        workingDirectory={agentWorkingDir}
+        gitBranch={agentGitBranch}
+      />,
+      ...(truncatedCount > 0
+        ? [
+            <TruncatedHistoryBanner
+              key="truncated-banner"
+              count={truncatedCount}
+            />,
+          ]
+        : []),
+      ...visibleItems.map((item) => (
+        <HistoryItemDisplay
+          key={item.id}
+          item={item}
+          isPending={false}
+          terminalWidth={terminalWidth}
+          mainAreaWidth={contentWidth}
+        />
+      )),
+    ];
+  }, [
+    committedItems,
+    agentModelId,
+    agent?.modelName,
+    agentWorkingDir,
+    agentGitBranch,
+    terminalWidth,
+    contentWidth,
+  ]);
+
   if (!agent || !interactiveAgent || !core) {
     return (
       <Box marginX={2}>
@@ -210,35 +265,14 @@ export const AgentChatView = ({ agentId }: AgentChatViewProps) => {
     );
   }
 
-  const agentModelId = core.modelConfig.model ?? '';
-
   return (
     <Box flexDirection="column">
       {/* Committed message history.
           key includes historyRemountKey: when refreshStatic() clears the
           terminal it bumps the key, forcing Static to remount and re-emit
-          all items on the cleared screen. */}
-      <Static
-        key={`agent-${agentId}-${historyRemountKey}`}
-        items={[
-          <AgentHeader
-            key="agent-header"
-            modelId={agentModelId}
-            modelName={agent.modelName}
-            workingDirectory={agentWorkingDir}
-            gitBranch={agentGitBranch}
-          />,
-          ...committedItems.map((item) => (
-            <HistoryItemDisplay
-              key={item.id}
-              item={item}
-              isPending={false}
-              terminalWidth={terminalWidth}
-              mainAreaWidth={contentWidth}
-            />
-          )),
-        ]}
-      >
+          all items on the cleared screen. The windowed slice limits
+          reprint cost to AGENT_STATIC_HISTORY_WINDOW items max. */}
+      <Static key={`agent-${agentId}-${historyRemountKey}`} items={staticItems}>
         {(item) => item}
       </Static>
 

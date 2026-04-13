@@ -12,7 +12,10 @@ const logger = createDebugLogger('SESSION_NOTES');
 
 const SESSION_NOTES_FILENAME = 'session-notes.md';
 
-const TEMPLATE = `# Session Notes
+export const SESSION_NOTES_TEMPLATE = `# Session Notes
+
+## Session Title
+_A short and distinctive 5-10 word descriptive title for the session. Super info dense, no filler_
 
 ## Current State
 _Where things stand right now — vital for continuity after compaction_
@@ -20,11 +23,20 @@ _Where things stand right now — vital for continuity after compaction_
 ## Task Specification
 _What was asked for and acceptance criteria_
 
+## Workflow
+_Bash commands that are usually run and in what order. How to interpret their output if not obvious_
+
 ## Files and Functions
 _Which files and functions were touched or are relevant_
 
+## Codebase Documentation
+_Important system components, how they work, and how they fit together_
+
 ## Errors and Corrections
-_Problems hit and how they were resolved_
+_Problems hit and how they were resolved. Approaches that failed and must not be retried_
+
+## Key Results
+_If the user asked for a specific output (answer, table, document) — repeat it here verbatim_
 
 ## Learnings
 _Insights gained that apply beyond this session_
@@ -38,10 +50,14 @@ _Chronological record of significant actions_
  * italic description line under each heading.
  */
 export type SessionNoteSection =
+  | 'Session Title'
   | 'Current State'
   | 'Task Specification'
+  | 'Workflow'
   | 'Files and Functions'
+  | 'Codebase Documentation'
   | 'Errors and Corrections'
+  | 'Key Results'
   | 'Learnings'
   | 'Worklog';
 
@@ -73,7 +89,7 @@ export async function readSessionNotes(
 export async function initSessionNotes(projectDir: string): Promise<void> {
   const filePath = getSessionNotesPath(projectDir);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, TEMPLATE, 'utf-8');
+  await fs.writeFile(filePath, SESSION_NOTES_TEMPLATE, 'utf-8');
   logger.debug('Session notes initialized');
 }
 
@@ -92,7 +108,7 @@ export async function updateSessionNoteSection(
   try {
     raw = await fs.readFile(filePath, 'utf-8');
   } catch {
-    raw = TEMPLATE;
+    raw = SESSION_NOTES_TEMPLATE;
   }
 
   const heading = `## ${section}`;

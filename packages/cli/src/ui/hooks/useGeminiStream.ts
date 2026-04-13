@@ -1310,12 +1310,60 @@ export const useGeminiStream = (
           if (generation !== null) queryGuardRef.current.end(generation);
 
           // Fire-and-forget memory extraction after each turn
-
           import('@qwen-code/qwen-code-core')
             .then((core) => {
               if (core.extractMemories && config) {
                 // Use addItem count as a proxy for message count
                 core.extractMemories(config, 10, 'project').catch(() => {});
+              }
+            })
+            .catch(() => {});
+
+          // Fire-and-forget session memory extraction after each turn.
+          // Updates .proto/session-notes.md with a running conversation summary
+          // so that compaction can use the notes instead of a fresh LLM call.
+          import('@qwen-code/qwen-code-core')
+            .then((core) => {
+              if (
+                core.extractSessionMemory &&
+                core.uiTelemetryService &&
+                config
+              ) {
+                const tokenCount =
+                  core.uiTelemetryService.getLastPromptTokenCount();
+                const history = geminiClient.getHistory?.() ?? [];
+                core
+                  .extractSessionMemory(config, history, tokenCount)
+                  .catch(() => {});
+              }
+            })
+            .catch(() => {});
+
+          // Fire-and-forget timed microcompact: clear old tool-result bodies
+          // on a timer (default 10 min) to reduce context without an LLM call.
+          import('@qwen-code/qwen-code-core')
+            .then((core) => {
+              const compression = config?.getChatCompression();
+              const enabled = compression?.timeBasedMicrocompact !== false;
+              if (
+                !enabled ||
+                !core.shouldRunTimedMicrocompact ||
+                !core.applyMicrocompact
+              )
+                return;
+
+              const intervalMs =
+                compression?.timeBasedMicrocompactIntervalMs ??
+                core.DEFAULT_TIMED_MICROCOMPACT_INTERVAL_MS;
+
+              if (!core.shouldRunTimedMicrocompact(intervalMs)) return;
+
+              const history = geminiClient.getHistory?.() ?? [];
+              const { newHistory, clearedCount } =
+                core.applyMicrocompact(history);
+              if (clearedCount > 0) {
+                geminiClient.setHistory(newHistory);
+                core.recordTimedMicrocompact?.();
               }
             })
             .catch(() => {});
@@ -1796,6 +1844,17 @@ export const useGeminiStream = (
       submitQuery(prompt, SendMessageType.Cron);
     }
   }, [streamingState, submitQuery, cronTrigger]);
+
+  // Arm the timed-microcompact clock once on session start.
+  // This prevents the first timed pass from firing immediately.
+  useEffect(() => {
+    import('@qwen-code/qwen-code-core')
+      .then((core) => {
+        core.initTimedMicrocompact?.();
+      })
+      .catch(() => {});
+     
+  }, []);
 
   return {
     streamingState,
