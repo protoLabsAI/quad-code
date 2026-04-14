@@ -3,9 +3,14 @@ name: 'Prepare Release'
 # Bumps version on main via a PR with auto-merge. When the PR merges,
 # release.yml picks up the commit automatically via commit message filter.
 #
-# Usage: Actions -> Prepare Release -> Run workflow -> pick bump type
+# Fires automatically when any non-release PR merges to main (patch bump).
+# Can also be triggered manually via Actions → Prepare Release to choose bump type.
 
 on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       bump:
@@ -27,7 +32,15 @@ permissions: read-all
 jobs:
   prepare:
     runs-on: ubuntu-latest
-    if: github.repository == 'protoLabsAI/protoCLI'
+    if: >-
+      github.repository == 'protoLabsAI/protoCLI' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.pull_request.merged == true &&
+          !startsWith(github.event.pull_request.title, 'chore: release')
+        )
+      )
     timeout-minutes: 10
     permissions:
       contents: write
@@ -56,7 +69,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Bump version
-        run: node scripts/version.js ${{ github.event.inputs.bump }}
+        run: node scripts/version.js ${{ inputs.bump || 'patch' }}
 
       - name: Get new version
         id: version
@@ -77,6 +90,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           BRANCH="prepare-release/v${VERSION}"
+          TRIGGER="${{ github.event_name == 'workflow_dispatch' && inputs.bump || 'patch (auto)' }}"
 
           git checkout -b "${BRANCH}"
           git add package.json package-lock.json packages/*/package.json
@@ -87,7 +101,7 @@ jobs:
             --base main \
             --head "${BRANCH}" \
             --title "chore: release v${VERSION}" \
-            --body "Manual version bump to v${VERSION} (${{ github.event.inputs.bump }})." \
+            --body "Version bump to v${VERSION} (${TRIGGER})." \
           )
           echo "Created PR: ${PR_URL}"
 
