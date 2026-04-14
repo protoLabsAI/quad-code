@@ -184,24 +184,29 @@ export class AgentTool extends BaseDeclarativeTool<AgentParams, ToolResult> {
     const updated: PersistedBackgroundAgent[] = [];
 
     for (const p of persisted) {
-      let entry = p;
-      if (p.status === 'running') {
-        entry = {
-          ...p,
-          status: 'error',
-          error: 'Agent did not complete before process restart',
-          completedTime: now,
-        };
+      if (p.status !== 'running') {
+        // Already finished in a prior session — keep in the store for pruning
+        // purposes but don't surface as new notifications in this session.
+        updated.push(p);
+        continue;
       }
+
+      // Agent was running when the process died — mark it as errored and
+      // notify the user once via the normal drain path.
+      const entry: PersistedBackgroundAgent = {
+        ...p,
+        status: 'error',
+        error: 'Agent did not complete before process restart',
+        completedTime: now,
+      };
       updated.push(entry);
 
-      // Populate the in-memory map so callers (e.g. getBackgroundAgents) see them.
       this.backgroundAgents.set(entry.agentId, {
         agentId: entry.agentId,
         agentName: entry.agentName,
         description: entry.description,
         startTime: entry.startTime,
-        completed: entry.status !== 'running',
+        completed: true,
         result: entry.result,
         error: entry.error,
       });
