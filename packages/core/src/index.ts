@@ -280,6 +280,8 @@ export * from './utils/textUtils.js';
 export * from './utils/thoughtUtils.js';
 export * from './utils/toml-to-markdown-converter.js';
 export * from './utils/tool-utils.js';
+export * from './utils/backgroundProgressEmitter.js';
+export * from './utils/streamStall.js';
 export * from './utils/workspaceContext.js';
 export * from './utils/yaml-parser.js';
 

@@ -34,6 +34,7 @@ import type {
 } from '../agents/runtime/agent-events.js';
 import { BuiltinAgentRegistry } from '../subagents/builtin-agents.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
+import { bridgeToProgressBus } from '../utils/backgroundProgressEmitter.js';
 import {
   loadStore,
   saveStore,
@@ -750,6 +751,13 @@ class AgentToolInvocation extends BaseToolInvocation<AgentParams, ToolResult> {
             status: 'running',
           }),
         );
+
+        // Bridge background agent events to the global progress bus so the
+        // CLI status bar can show live round/tool activity.
+        const bgEmitter = subagent.getEventEmitter();
+        if (bgEmitter) {
+          bridgeToProgressBus(bgEmitter, entry.agentName, agentId);
+        }
 
         // Fire and forget — execution runs independently.
         // The span covers the full async lifetime: it ends when the

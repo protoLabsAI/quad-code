@@ -94,6 +94,7 @@ import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 import { useMessageQueue } from './hooks/useMessageQueue.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
+import { useBackgroundAgentProgress } from './hooks/useBackgroundAgentProgress.js';
 import { useSessionStats } from './contexts/SessionContext.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
 import {
@@ -291,6 +292,24 @@ export const AppContainer = (props: AppContainerProps) => {
     () => setUpdateHandler(historyManager.addItem, setUpdateInfo),
     [historyManager.addItem],
   );
+
+  // Surface background agent completions and limit-hit warnings in the
+  // conversation history so the user and model can see them.
+  // IMPORTANT: dep array must use historyManager.addItem (stable useCallback),
+  // NOT historyManager (new object every render) — using the whole object would
+  // cause an infinite render loop when hitLimit is true.
+  const { lastFinished } = useBackgroundAgentProgress();
+  const addHistoryItem = historyManager.addItem;
+  useEffect(() => {
+    if (!lastFinished?.hitLimit) return;
+    addHistoryItem(
+      {
+        type: MessageType.WARNING,
+        text: `Background agent "${lastFinished.agentName}" hit its ${lastFinished.terminateReason === 'timeout' ? 'time' : 'turn'} limit after ${lastFinished.rounds} round(s) — notes may be partially updated.`,
+      },
+      Date.now(),
+    );
+  }, [lastFinished, addHistoryItem]);
 
   // Watch for model changes (e.g., user switches model via /model).
   // Skip the initial check to avoid a re-render during Ink's first render pass.
@@ -593,8 +612,12 @@ export const AppContainer = (props: AppContainerProps) => {
     [config],
   );
 
+  // Use stable addItem reference so performMemoryRefresh (and anything that
+  // depends on it, like handleCompletedTools in useGeminiStream) is not
+  // recreated on every render.
+  const stableAddItem = historyManager.addItem;
   const performMemoryRefresh = useCallback(async () => {
-    historyManager.addItem(
+    stableAddItem(
       {
         type: MessageType.INFO,
         text: 'Refreshing hierarchical memory (QWEN.md or other context files)...',
@@ -617,7 +640,7 @@ export const AppContainer = (props: AppContainerProps) => {
       config.setGeminiMdFileCount(fileCount);
       setGeminiMdFileCount(fileCount);
 
-      historyManager.addItem(
+      stableAddItem(
         {
           type: MessageType.INFO,
           text: `Memory refreshed successfully. ${
@@ -636,7 +659,7 @@ export const AppContainer = (props: AppContainerProps) => {
       );
     } catch (error) {
       const errorMessage = getErrorMessage(error);
-      historyManager.addItem(
+      stableAddItem(
         {
           type: MessageType.ERROR,
           text: `Error refreshing memory: ${errorMessage}`,
@@ -645,7 +668,7 @@ export const AppContainer = (props: AppContainerProps) => {
       );
       debugLogger.error('Error refreshing memory:', error);
     }
-  }, [config, historyManager, settings.merged]);
+  }, [config, stableAddItem, settings.merged]);
 
   const cancelHandlerRef = useRef<() => void>(() => {});
 

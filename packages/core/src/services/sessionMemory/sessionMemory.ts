@@ -37,11 +37,16 @@ import {
   setLastSummarizedCursorIndex,
   shouldExtractSessionMemory,
 } from './sessionMemoryUtils.js';
+import { AgentEventEmitter } from '../../agents/runtime/agent-events.js';
+import { bridgeToProgressBus } from '../../utils/backgroundProgressEmitter.js';
 
 const logger = createDebugLogger('SESSION_MEMORY');
 
-const MAX_EXTRACTOR_TURNS = 2;
-const MAX_EXTRACTOR_MINUTES = 2;
+// Generous turn budget: the agent receives notes + history in its system
+// prompt (no read turn needed), so 4 turns gives ample runway to update
+// multiple sections across complex histories without timing out silently.
+const MAX_EXTRACTOR_TURNS = 4;
+const MAX_EXTRACTOR_MINUTES = 3;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -134,6 +139,11 @@ async function _runExtraction(
 
   const systemPrompt = buildExtractionPrompt(currentNotes, notesPath, history);
 
+  // Wire a per-run event emitter so progress is visible in the UI status bar.
+  const eventEmitter = new AgentEventEmitter();
+  const agentId = `session-memory-${Date.now()}`;
+  bridgeToProgressBus(eventEmitter, 'session-memory', agentId);
+
   const agent = await AgentHeadless.create(
     'session-memory',
     config,
@@ -145,6 +155,7 @@ async function _runExtraction(
     },
     // Restrict to Edit only — the agent should only touch the notes file
     { tools: [ToolNames.EDIT] },
+    eventEmitter,
   );
 
   // Hard wall: abort the agent if it hasn't finished within the time budget.

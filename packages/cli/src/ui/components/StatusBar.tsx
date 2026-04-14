@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type React from 'react';
+import React from 'react';
 import { Box, Text } from 'ink';
 import path from 'node:path';
 import os from 'node:os';
 import { useGitBranchName } from '../hooks/useGitBranchName.js';
 import { useGitDiffStat } from '../hooks/useGitDiffStat.js';
-import { useSessionMemoryStatus } from '../hooks/useSessionMemoryStatus.js';
+import { useBackgroundAgentProgress } from '../hooks/useBackgroundAgentProgress.js';
 import { theme } from '../semantic-colors.js';
 
 // ─── Badge ────────────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ interface StatusBarProps {
 export const StatusBar = ({ cwd, terminalWidth }: StatusBarProps) => {
   const branch = useGitBranchName(cwd);
   const diff = useGitDiffStat(cwd);
-  const { isExtracting } = useSessionMemoryStatus();
+  const { activeAgents } = useBackgroundAgentProgress();
 
   const cwdDisplay = tildify(path.resolve(cwd));
 
@@ -89,15 +89,25 @@ export const StatusBar = ({ cwd, terminalWidth }: StatusBarProps) => {
         ⟡
       </Text>
 
-      {/* Session memory extraction indicator */}
-      {isExtracting && (
-        <>
-          <Sep />
-          <Badge>
-            <Text color={theme.text.secondary}>↺ notes</Text>
-          </Badge>
-        </>
-      )}
+      {/* Background agent activity indicators */}
+      {activeAgents.map((agent) => {
+        const label =
+          agent.agentName === 'session-memory'
+            ? agent.toolName
+              ? '↺ notes: writing'
+              : `↺ notes: turn ${agent.round}`
+            : agent.toolName
+              ? `⟳ ${agent.agentName}: ${agent.toolName}`
+              : `⟳ ${agent.agentName}: turn ${agent.round}`;
+        return (
+          <React.Fragment key={agent.agentId}>
+            <Sep />
+            <Badge>
+              <Text color={theme.text.secondary}>{label}</Text>
+            </Badge>
+          </React.Fragment>
+        );
+      })}
 
       {hasDiff && (
         <>

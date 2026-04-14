@@ -33,6 +33,18 @@ import {
   parseThought,
   type ThoughtSummary,
 } from '../utils/thoughtUtils.js';
+import { withChunkTimeout, StreamStallError } from '../utils/streamStall.js';
+
+/**
+ * Max ms to wait between individual stream chunks before declaring a stall.
+ * 30 s is conservative enough for slow-but-valid model responses while still
+ * catching genuine frozen connections well before the 120 s SDK timeout.
+ * Override via PROTO_STREAM_STALL_TIMEOUT_MS env var.
+ */
+const STREAM_STALL_TIMEOUT_MS = parseInt(
+  process.env['PROTO_STREAM_STALL_TIMEOUT_MS'] ?? '30000',
+  10,
+);
 
 // Define a structure for tools passed to the server
 export interface ServerTool {
@@ -242,7 +254,7 @@ export class Turn {
     try {
       // Note: This assumes `sendMessageStream` yields events like
       // { type: StreamEventType.RETRY } or { type: StreamEventType.CHUNK, value: GenerateContentResponse }
-      const responseStream = await this.chat.sendMessageStream(
+      const rawStream = await this.chat.sendMessageStream(
         model,
         {
           message: req,
@@ -251,6 +263,14 @@ export class Turn {
           },
         },
         this.prompt_id,
+      );
+
+      // Wrap with per-chunk idle watchdog.  If no chunk arrives within
+      // STREAM_STALL_TIMEOUT_MS the generator throws StreamStallError,
+      // which the catch block below converts to a GeminiEventType.Error.
+      const responseStream = withChunkTimeout(
+        rawStream,
+        STREAM_STALL_TIMEOUT_MS,
       );
 
       for await (const streamEvent of responseStream) {
@@ -340,6 +360,21 @@ export class Turn {
       if (signal.aborted) {
         yield { type: GeminiEventType.UserCancelled };
         // Regular cancellation error, fail gracefully.
+        return;
+      }
+
+      // Stream stall: surface a clear, actionable message without reporting
+      // to the error service (it's a connectivity issue, not a code bug).
+      if (e instanceof StreamStallError) {
+        yield {
+          type: GeminiEventType.Error,
+          value: {
+            error: {
+              message: e.message,
+              status: undefined,
+            },
+          },
+        };
         return;
       }
 
