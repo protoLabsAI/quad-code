@@ -159,6 +159,14 @@ Tools are exposed as `mcp__<server_name>__<tool_name>` and available to the agen
 
 proto auto-discovers Claude Code plugins installed at `~/.claude/plugins/`. Any plugin's `commands/` directory is automatically loaded as slash commands — no additional config needed.
 
+### Environment variable overrides
+
+| Variable                        | Default | Description                                                                                     |
+| ------------------------------- | ------- | ----------------------------------------------------------------------------------------------- |
+| `PROTO_STREAM_STALL_TIMEOUT_MS` | `90000` | Max ms to wait between streaming chunks before declaring the connection stalled (then retrying) |
+| `PROTO_SYSTEM_DEFAULTS_PATH`    | —       | Override path to the system defaults settings file                                              |
+| `PROTO_SYSTEM_SETTINGS_PATH`    | —       | Override path to the system settings override file                                              |
+
 ## Observability
 
 proto supports [Langfuse](https://langfuse.com) tracing out of the box. Set three environment variables and every session is fully traced — LLM calls (all providers), tool executions, subagent lifecycles, and turn hierarchy.
@@ -331,15 +339,20 @@ Results are cached at `.proto/repo-map-cache.json` and auto-invalidate on file c
 
 proto ships with 22 bundled skills for agentic workflows:
 
-- **browser-automation** — Web browser automation
+- **adversarial-verification** — Adversarial review and stress-testing of agent output
 - **brainstorming** — Structured ideation
+- **browser-automation** — Web browser automation
+- **coding-agent-standards** — Enforced coding conventions for agent-written code
 - **dispatching-parallel-agents** — Fan-out/fan-in subagent patterns
 - **executing-plans** — Step-by-step plan execution
 - **finishing-a-development-branch** — Pre-merge cleanup
+- **harness-reference** — Sprint contracts, verification gates, and retry logic reference
+- **loop** — Iterative refinement loops
 - **qc-helper** — Quality control checks
 - **receiving-code-review** — Process review feedback
 - **requesting-code-review** — Generate review requests
 - **review** — Code review workflow
+- **sprint-contract** — Scope lock and contract negotiation
 - **subagent-driven-development** — Delegate to specialized subagents
 - **systematic-debugging** — Structured debug methodology
 - **test-driven-development** — TDD workflow
@@ -457,11 +470,16 @@ Any user-defined sub-agent from `.proto/agents/` can also be used as a member ty
 
 ## Keyboard Shortcuts
 
-| Shortcut  | Action                   |
-| --------- | ------------------------ |
-| `Ctrl+C`  | Cancel current operation |
-| `Ctrl+D`  | Exit (on empty line)     |
-| `Up/Down` | Navigate command history |
+| Shortcut    | Action                                                          |
+| ----------- | --------------------------------------------------------------- |
+| `Ctrl+C`    | Cancel ongoing request. Press twice to exit.                    |
+| `Ctrl+D`    | Exit if input is empty.                                         |
+| `Ctrl+L`    | Clear the screen                                                |
+| `Ctrl+Y`    | Retry the last failed request                                   |
+| `Shift+Tab` | Cycle approval modes: `plan` → `default` → `auto-edit` → `yolo` |
+| `Up/Down`   | Navigate command history                                        |
+
+See [Keyboard Shortcuts reference](docs/reference/keyboard-shortcuts.md) for the full list.
 
 ## Voice Integration
 

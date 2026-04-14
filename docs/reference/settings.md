@@ -35,6 +35,7 @@ In addition to `settings.json`, the `.proto/` directory can contain:
 - `.proto/agents/` — custom sub-agent definitions
 - `.proto/skills/` — project skills
 - `.proto/memory/` — project memory files
+- `.proto/session-notes.md` — auto-maintained session checkpoint (updated by background agent after each turn; used as summary input when the context window is compacted)
 - `.proto/settings.json` — project settings
 - `.proto/sandbox-macos-custom.sb` — custom Seatbelt profile
 - `.proto/sandbox.Dockerfile` — custom container image
@@ -78,6 +79,16 @@ In addition to `settings.json`, the `.proto/` directory can contain:
 | `model.generationConfig.timeout`            | number  | —       | Request timeout (ms)                       |
 | `model.generationConfig.maxRetries`         | number  | —       | Max retries on failure                     |
 | `model.generationConfig.samplingParams`     | object  | —       | `temperature`, `top_p`, `max_tokens`, etc. |
+
+### Environment variable overrides
+
+These variables take effect at runtime and do not require a settings file entry.
+
+| Variable                        | Default | Description                                                                                                                                                      |
+| ------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROTO_STREAM_STALL_TIMEOUT_MS` | `90000` | Max ms to wait between streaming chunks before the stall watchdog fires (throws a retryable error). Increase if complex agentic responses are hitting the limit. |
+| `PROTO_SYSTEM_DEFAULTS_PATH`    | —       | Override path to the system defaults settings file                                                                                                               |
+| `PROTO_SYSTEM_SETTINGS_PATH`    | —       | Override path to the system settings override file                                                                                                               |
 
 ### `modelProviders`
 
