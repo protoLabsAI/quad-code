@@ -698,6 +698,7 @@ export const AppContainer = (props: AppContainerProps) => {
     handleApprovalModeChange,
     activePtyId,
     loopDetectionConfirmationRequest,
+    backgroundCurrentSession,
   } = useGeminiStream(
     config.getGeminiClient(),
     historyManager.history,
@@ -1324,6 +1325,7 @@ export const AppContainer = (props: AppContainerProps) => {
     ideContextState,
     handleExit,
     debugKeystrokeLogging: settings.merged.general?.debugKeystrokeLogging,
+    onBackgroundSession: backgroundCurrentSession,
   });
 
   // Update terminal title with proto status and thoughts

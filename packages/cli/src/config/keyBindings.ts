@@ -51,6 +51,7 @@ export enum Command {
   EXIT = 'exit',
   SHOW_MORE_LINES = 'showMoreLines',
   RETRY_LAST = 'retryLast',
+  BACKGROUND_SESSION = 'backgroundSession',
 
   // Shell commands
   REVERSE_SEARCH = 'reverseSearch',
@@ -172,6 +173,7 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.EXIT]: [{ key: 'd', ctrl: true }],
   [Command.SHOW_MORE_LINES]: [{ key: 's', ctrl: true }],
   [Command.RETRY_LAST]: [{ key: 'y', ctrl: true }],
+  [Command.BACKGROUND_SESSION]: [{ key: 'b', ctrl: true }],
 
   // Shell commands
   [Command.REVERSE_SEARCH]: [{ key: 'r', ctrl: true }],

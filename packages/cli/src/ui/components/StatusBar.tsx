@@ -53,6 +53,7 @@ function tildify(p: string): string {
 interface StatusBarProps {
   cwd: string;
   terminalWidth: number;
+  bgSessionActive?: boolean;
 }
 
 /**
@@ -61,7 +62,11 @@ interface StatusBarProps {
  *
  * All info is read-only; the diff stat polls git every 5 s.
  */
-export const StatusBar = ({ cwd, terminalWidth }: StatusBarProps) => {
+export const StatusBar = ({
+  cwd,
+  terminalWidth,
+  bgSessionActive,
+}: StatusBarProps) => {
   const branch = useGitBranchName(cwd);
   const diff = useGitDiffStat(cwd);
   const { activeAgents } = useBackgroundAgentProgress();
@@ -108,6 +113,15 @@ export const StatusBar = ({ cwd, terminalWidth }: StatusBarProps) => {
           </React.Fragment>
         );
       })}
+
+      {bgSessionActive && (
+        <>
+          <Sep />
+          <Badge>
+            <Text color={theme.text.secondary}>⟳ bg session</Text>
+          </Badge>
+        </>
+      )}
 
       {hasDiff && (
         <>

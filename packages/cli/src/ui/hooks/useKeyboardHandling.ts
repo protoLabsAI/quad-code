@@ -36,6 +36,7 @@ interface UseKeyboardHandlingParams {
     timerRef: React.MutableRefObject<NodeJS.Timeout | null>,
   ) => void;
   debugKeystrokeLogging: boolean | undefined;
+  onBackgroundSession: (() => void) | undefined;
 }
 
 interface UseKeyboardHandlingResult {
@@ -71,6 +72,7 @@ export function useKeyboardHandling(
     handleExit,
     handleSlashCommand,
     debugKeystrokeLogging,
+    onBackgroundSession,
   } = params;
 
   const [showToolDescriptions, setShowToolDescriptions] =
@@ -237,6 +239,12 @@ export function useKeyboardHandling(
       if (activePtyId || embeddedShellFocused) {
         setEmbeddedShellFocused((prev) => !prev);
       }
+    } else if (
+      keyMatchers[Command.BACKGROUND_SESSION](key) &&
+      onBackgroundSession
+    ) {
+      onBackgroundSession();
+      return;
     }
   };
 

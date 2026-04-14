@@ -186,6 +186,9 @@ export const useGeminiStream = (
   const lastPromptRef = useRef<PartListUnion | null>(null);
   const lastPromptErroredRef = useRef(false);
   const [isResponding, setIsResponding] = useState<boolean>(false);
+  const isBackgroundedRef = useRef(false);
+  const bgResponseTextRef = useRef('');
+  const [isBackgrounded, setIsBackgrounded] = useState(false);
   const pendingCompletedToolsRef = useRef<TrackedToolCall[]>([]);
   const [thought, setThought] = useState<ThoughtSummary | null>(null);
   const [pendingHistoryItem, pendingHistoryItemRef, setPendingHistoryItem] =
@@ -399,6 +402,9 @@ export const useGeminiStream = (
     ) {
       return StreamingState.WaitingForConfirmation;
     }
+    if (isBackgrounded) {
+      return StreamingState.Backgrounded;
+    }
     if (
       isResponding ||
       toolCalls.some(
@@ -416,7 +422,7 @@ export const useGeminiStream = (
       return StreamingState.Responding;
     }
     return StreamingState.Idle;
-  }, [isResponding, toolCalls]);
+  }, [isResponding, toolCalls, isBackgrounded]);
 
   useEffect(() => {
     if (
@@ -440,7 +446,10 @@ export const useGeminiStream = (
   }, [streamingState, config, history]);
 
   const cancelOngoingRequest = useCallback(() => {
-    if (streamingState !== StreamingState.Responding) {
+    if (
+      streamingState !== StreamingState.Responding &&
+      streamingState !== StreamingState.Backgrounded
+    ) {
       return;
     }
     if (turnCancelledRef.current) {
@@ -491,6 +500,32 @@ export const useGeminiStream = (
     config,
     getPromptCount,
   ]);
+
+  const backgroundCurrentSession = useCallback(() => {
+    if (streamingState !== StreamingState.Responding) return;
+
+    // Flush any partial in-flight content to static history so the user
+    // can see what was streamed so far.
+    if (pendingHistoryItemRef.current) {
+      addItem(pendingHistoryItemRef.current, Date.now());
+      setPendingHistoryItem(null);
+    }
+
+    // Arm background mode — content events will accumulate silently.
+    isBackgroundedRef.current = true;
+    bgResponseTextRef.current = '';
+    setIsBackgrounded(true);
+    // Free the responding indicator so the input is unblocked visually.
+    setIsResponding(false);
+
+    addItem(
+      {
+        type: MessageType.INFO,
+        text: "↓ Running in background — you'll be notified when done",
+      },
+      Date.now(),
+    );
+  }, [streamingState, pendingHistoryItemRef, addItem, setPendingHistoryItem]);
 
   const prepareQueryForGemini = useCallback(
     async (
@@ -619,6 +654,11 @@ export const useGeminiStream = (
         // Prevents additional output after a user initiated cancel.
         return '';
       }
+      // When backgrounded: accumulate silently, skip all UI updates
+      if (isBackgroundedRef.current) {
+        bgResponseTextRef.current += eventValue;
+        return currentGeminiMessageBuffer;
+      }
       let newGeminiMessageBuffer = currentGeminiMessageBuffer + eventValue;
       if (
         pendingHistoryItemRef.current?.type !== 'gemini' &&
@@ -691,6 +731,9 @@ export const useGeminiStream = (
     ): string => {
       if (turnCancelledRef.current) {
         return '';
+      }
+      if (isBackgroundedRef.current) {
+        return currentThoughtBuffer;
       }
 
       // Extract the description text from the thought summary
@@ -1140,7 +1183,8 @@ export const useGeminiStream = (
 
       if (
         (streamingState === StreamingState.Responding ||
-          streamingState === StreamingState.WaitingForConfirmation) &&
+          streamingState === StreamingState.WaitingForConfirmation ||
+          streamingState === StreamingState.Backgrounded) &&
         !bypassGuard
       ) {
         // Release the guard — we're not actually going to run
@@ -1289,6 +1333,15 @@ export const useGeminiStream = (
         } catch (error: unknown) {
           if (error instanceof UnauthorizedError) {
             onAuthError('Session expired or is unauthorized.');
+          } else if (
+            isBackgroundedRef.current &&
+            isNodeError(error) &&
+            error.name === 'AbortError'
+          ) {
+            // AbortError from background cancellation — handled in finally
+          } else if (isBackgroundedRef.current) {
+            // Non-abort error in background session — mark as errored, handled in finally
+            lastPromptErroredRef.current = true;
           } else if (!isNodeError(error) || error.name !== 'AbortError') {
             lastPromptErroredRef.current = true;
             const retryHint = t('Press Ctrl+Y to retry');
@@ -1303,6 +1356,49 @@ export const useGeminiStream = (
             });
           }
         } finally {
+          // Background session completion/cancellation/error notification
+          if (isBackgroundedRef.current) {
+            const wasCancelled = turnCancelledRef.current;
+            const hadError = lastPromptErroredRef.current;
+            const response = bgResponseTextRef.current.trim();
+            // Reset all background state synchronously before scheduling React updates
+            isBackgroundedRef.current = false;
+            bgResponseTextRef.current = '';
+            setIsBackgrounded(false);
+
+            if (wasCancelled) {
+              addItem(
+                {
+                  type: MessageType.INFO,
+                  text: '↓ Background session cancelled',
+                },
+                Date.now(),
+              );
+            } else if (hadError) {
+              addItem(
+                {
+                  type: MessageType.WARNING,
+                  text: '↓ Background session failed',
+                },
+                Date.now(),
+              );
+            } else {
+              const preview =
+                response.length > 0
+                  ? response.length > 300
+                    ? response.slice(0, 300) + '…'
+                    : response
+                  : '(no response)';
+              addItem(
+                {
+                  type: MessageType.INFO,
+                  text: `✓ Background session complete\n\n${preview}`,
+                },
+                Date.now(),
+              );
+            }
+          }
+
           setIsResponding(false);
           // Generation-safe end: if forceEnd() was called during cancel,
           // this becomes a no-op (stale generation). Otherwise it cleanly
@@ -1415,7 +1511,8 @@ export const useGeminiStream = (
   const retryLastPrompt = useCallback(async () => {
     if (
       streamingState === StreamingState.Responding ||
-      streamingState === StreamingState.WaitingForConfirmation
+      streamingState === StreamingState.WaitingForConfirmation ||
+      streamingState === StreamingState.Backgrounded
     ) {
       return;
     }
@@ -1853,7 +1950,6 @@ export const useGeminiStream = (
         core.initTimedMicrocompact?.();
       })
       .catch(() => {});
-     
   }, []);
 
   return {
@@ -1868,5 +1964,6 @@ export const useGeminiStream = (
     handleApprovalModeChange,
     activePtyId,
     loopDetectionConfirmationRequest,
+    backgroundCurrentSession,
   };
 };

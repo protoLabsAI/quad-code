@@ -16,6 +16,7 @@ import { AgentTabBar } from '../components/agent-view/AgentTabBar.js';
 import { AgentChatView } from '../components/agent-view/AgentChatView.js';
 import { AgentComposer } from '../components/agent-view/AgentComposer.js';
 import { StatusBar } from '../components/StatusBar.js';
+import { StreamingState } from '../types.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import { useAgentViewState } from '../contexts/AgentViewContext.js';
@@ -86,7 +87,11 @@ export const DefaultAppLayout: React.FC = () => {
       {hasAgents && !uiState.dialogsVisible && <AgentTabBar />}
 
       {/* Status bar: CWD · git branch · uncommitted diff */}
-      <StatusBar cwd={config.getTargetDir()} terminalWidth={terminalWidth} />
+      <StatusBar
+        cwd={config.getTargetDir()}
+        terminalWidth={terminalWidth}
+        bgSessionActive={uiState.streamingState === StreamingState.Backgrounded}
+      />
     </Box>
   );
 };
