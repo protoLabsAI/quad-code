@@ -94,6 +94,7 @@ import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 import { useMessageQueue } from './hooks/useMessageQueue.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
+import { useBackgroundAgentProgress } from './hooks/useBackgroundAgentProgress.js';
 import { useSessionStats } from './contexts/SessionContext.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
 import {
@@ -291,6 +292,22 @@ export const AppContainer = (props: AppContainerProps) => {
     () => setUpdateHandler(historyManager.addItem, setUpdateInfo),
     [historyManager.addItem],
   );
+
+  // Surface background agent completions and limit-hit warnings in the
+  // conversation history so the user and model can see them.
+  const { lastFinished } = useBackgroundAgentProgress();
+  useEffect(() => {
+    if (!lastFinished) return;
+    if (lastFinished.hitLimit) {
+      historyManager.addItem(
+        {
+          type: MessageType.WARNING,
+          text: `Background agent "${lastFinished.agentName}" hit its ${lastFinished.terminateReason === 'timeout' ? 'time' : 'turn'} limit after ${lastFinished.rounds} round(s) — notes may be partially updated.`,
+        },
+        Date.now(),
+      );
+    }
+  }, [lastFinished, historyManager]);
 
   // Watch for model changes (e.g., user switches model via /model).
   // Skip the initial check to avoid a re-render during Ink's first render pass.
