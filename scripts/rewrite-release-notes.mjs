@@ -22,10 +22,13 @@ function getTags() {
 }
 
 function getCommitsBetween(fromTag, toTag) {
-  const log = run(`git log ${fromTag}..${toTag} --pretty=format:"%s"`);
+  const SEPARATOR = '<<<COMMIT>>>';
+  const log = run(
+    `git log ${fromTag}..${toTag} --pretty=format:"${SEPARATOR}%s%n%b"`,
+  );
   return log
-    .split('\n')
-    .map((line) => line.replace(/^"|"$/g, '').trim())
+    .split(SEPARATOR)
+    .map((block) => block.trim())
     .filter(Boolean);
 }
 
@@ -44,27 +47,30 @@ Rules:
 - No emojis anywhere
 - Max 300 words total
 - Output: one-line intro sentence, then the sections with bullets
-- Do not include a version number in the output`;
+- Do not include a version number in the output
+- Always write the release notes — never ask clarifying questions or say you need more information
+- If commits are sparse, infer user impact from what is present`;
 
 function buildUserPrompt(version, previousVersion, commits) {
   const filtered = commits.filter((c) => {
-    const lower = c.toLowerCase();
+    const subject = c.split('\n')[0].toLowerCase();
     return (
-      !lower.startsWith('merge ') &&
-      !lower.startsWith('chore: release') &&
-      !lower.startsWith('promote') &&
-      !lower.startsWith('chore: bump') &&
+      !subject.startsWith('merge ') &&
+      !subject.startsWith('chore: release') &&
+      !subject.startsWith('promote') &&
+      !subject.startsWith('chore: bump') &&
       c.length > 0
     );
   });
 
-  const bulletList = filtered.map((c) => `- ${c}`).join('\n');
+  const commitBlocks = filtered.join('\n---\n');
 
   return {
     prompt: `Write release notes for ${version} (previous: ${previousVersion}).
 
-Raw commits:
-${bulletList}`,
+Each commit below includes the subject line and, where available, the commit body:
+
+${commitBlocks}`,
     filteredCount: filtered.length,
   };
 }
