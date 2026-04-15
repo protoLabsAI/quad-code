@@ -713,21 +713,22 @@ export class OpenAIContentConverter {
       };
     }
 
-    // For text-only responses (no media), use plain string content.
-    // Many OpenAI-compatible providers (LiteLLM, local models) only accept
-    // string content in tool messages and crash on array content parts.
-    const hasMediaParts = contentParts.some((p) => p.type !== 'text');
-    if (!hasMediaParts) {
+    // Single text-only response: use plain string content for maximum
+    // provider compatibility. Many OpenAI-compatible providers (LiteLLM,
+    // local models) only accept string content in tool messages and crash on
+    // array content parts. Multi-part responses (text+media, multi-text)
+    // keep the array format since they need it to preserve all content.
+    if (contentParts.length === 1 && contentParts[0].type === 'text') {
       return {
         role: 'tool' as const,
         tool_call_id: response.id || '',
-        content: contentParts
-          .map((p) => (p as OpenAI.Chat.ChatCompletionContentPartText).text)
-          .join('\n'),
+        content: (contentParts[0] as OpenAI.Chat.ChatCompletionContentPartText)
+          .text,
       };
     }
 
-    // Multi-modal response — use array format for providers that support it
+    // Multi-part response (text+media, multi-text, unsupported media placeholders)
+    // — use array format to preserve all content parts.
     return {
       role: 'tool' as const,
       tool_call_id: response.id || '',
