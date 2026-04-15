@@ -7,7 +7,6 @@
 import { Box, Static } from 'ink';
 import { useMemo } from 'react';
 import { HistoryItemDisplay } from './HistoryItemDisplay.js';
-import { TruncatedHistoryBanner } from './TruncatedHistoryBanner.js';
 import { ShowMoreLines } from './ShowMoreLines.js';
 import { Notifications } from './Notifications.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
@@ -22,18 +21,6 @@ import { DebugModeNotification } from './DebugModeNotification.js';
 // usage.
 const MAX_GEMINI_MESSAGE_LINES = 65536;
 
-/**
- * Maximum number of history items to keep in the Static render window.
- * Items before this window have already been printed to the terminal and
- * do not need to be held in the React tree. Ink's Static identifies
- * already-printed items by React key, so the slice does not cause
- * re-printing — only genuinely new items at the tail are emitted.
- *
- * On historyRemountKey change (terminal clear + view switch), only the
- * windowed items are reprinted instead of the full unbounded history.
- */
-const STATIC_HISTORY_WINDOW = 200;
-
 export const MainContent = () => {
   const { version } = useAppContext();
   const uiState = useUIState();
@@ -45,25 +32,16 @@ export const MainContent = () => {
     availableTerminalHeight,
   } = uiState;
 
-  const staticItems = useMemo(() => {
-    const history = uiState.history;
-    const truncatedCount = Math.max(0, history.length - STATIC_HISTORY_WINDOW);
-    const visibleHistory =
-      truncatedCount > 0 ? history.slice(-STATIC_HISTORY_WINDOW) : history;
-
-    return [
+  // NOTE: Ink's <Static> tracks rendered items by array INDEX (not React key).
+  // It stores the last-rendered length and slices from that index on each
+  // render. If the array ever shrinks or stays the same length, the index
+  // overshoots and nothing new is printed. The array passed to Static must
+  // therefore only ever grow — never shrink or stay constant length.
+  const staticItems = useMemo(() => [
       <AppHeader key="app-header" version={version} />,
       <DebugModeNotification key="debug-notification" />,
       <Notifications key="notifications" />,
-      ...(truncatedCount > 0
-        ? [
-            <TruncatedHistoryBanner
-              key="truncated-banner"
-              count={truncatedCount}
-            />,
-          ]
-        : []),
-      ...visibleHistory.map((h) => (
+      ...uiState.history.map((h) => (
         <HistoryItemDisplay
           terminalWidth={terminalWidth}
           mainAreaWidth={mainAreaWidth}
@@ -75,8 +53,7 @@ export const MainContent = () => {
           commands={uiState.slashCommands}
         />
       )),
-    ];
-  }, [
+    ], [
     uiState.history,
     uiState.slashCommands,
     version,
