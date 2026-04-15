@@ -202,6 +202,52 @@ function extractCuratedHistory(comprehensiveHistory: Content[]): Content[] {
 }
 
 /**
+ * Trims recent tool-error exchanges from history when a model returns an
+ * empty response — a symptom of context overflow from a truncation cascade.
+ *
+ * Scans backwards and removes model tool-call turns paired with user
+ * tool-result turns that contain only error responses (i.e. tool validation
+ * failures, not successful results). Stops at the first non-error pair or
+ * after MAX_TRIM_PAIRS removals.
+ *
+ * Returns a new array; never mutates the input.
+ */
+function trimToolErrorsFromContext(
+  contents: Content[],
+  maxTrimPairs = 6,
+): Content[] {
+  const trimmed = [...contents];
+  let trimmed_count = 0;
+
+  // Walk backwards in pairs: model (tool-call) + user (tool-result)
+  while (trimmed.length >= 2 && trimmed_count < maxTrimPairs) {
+    const last = trimmed[trimmed.length - 1];
+    const prev = trimmed[trimmed.length - 2];
+
+    // User turn must be all functionResponse parts with error fields
+    if (last.role !== 'user') break;
+    const allErrors = last.parts?.every(
+      (p) =>
+        p.functionResponse !== undefined &&
+        typeof (p.functionResponse.response as Record<string, unknown>)?.[
+          'error'
+        ] === 'string',
+    );
+    if (!allErrors) break;
+
+    // Preceding turn must be the model's tool call
+    if (prev.role !== 'model') break;
+    const hasToolCall = prev.parts?.some((p) => p.functionCall !== undefined);
+    if (!hasToolCall) break;
+
+    trimmed.splice(trimmed.length - 2, 2);
+    trimmed_count++;
+  }
+
+  return trimmed;
+}
+
+/**
  * Custom error to signal that a stream completed with invalid content,
  * which should trigger a retry.
  */
@@ -400,7 +446,39 @@ export class GeminiChat {
               await new Promise((res) => setTimeout(res, delayMs));
               continue;
             }
-            // Transient budget exhausted — stop immediately.
+            // Transient budget exhausted.
+            // For NO_RESPONSE_TEXT specifically (context overflow from a
+            // truncation cascade), try one final pass with recent tool errors
+            // stripped from the context before giving up.
+            if (
+              isTransientStreamError &&
+              (error as InvalidStreamError).type === 'NO_RESPONSE_TEXT'
+            ) {
+              const trimmedContents =
+                trimToolErrorsFromContext(requestContents);
+              if (trimmedContents.length < requestContents.length) {
+                debugLogger.warn(
+                  `NO_RESPONSE_TEXT: retrying with trimmed context ` +
+                    `(removed ${requestContents.length - trimmedContents.length} ` +
+                    `tool-error messages)`,
+                );
+                try {
+                  const stream = await self.makeApiCallAndProcessStream(
+                    model,
+                    trimmedContents,
+                    params,
+                    prompt_id,
+                  );
+                  for await (const chunk of stream) {
+                    yield { type: StreamEventType.CHUNK, value: chunk };
+                  }
+                  lastError = null;
+                } catch {
+                  // trimmed context retry also failed — fall through to throw
+                }
+              }
+              break;
+            }
             if (isTransientStreamError) {
               break;
             }
