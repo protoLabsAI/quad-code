@@ -42,11 +42,6 @@ import { GeminiRespondingSpinner } from '../GeminiRespondingSpinner.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { agentMessagesToHistoryItems } from './agentHistoryAdapter.js';
 import { AgentHeader } from './AgentHeader.js';
-import { TruncatedHistoryBanner } from '../TruncatedHistoryBanner.js';
-
-// How many committed items to keep in the Static render window.
-// Mirrors STATIC_HISTORY_WINDOW in MainContent.tsx.
-const AGENT_STATIC_HISTORY_WINDOW = 200;
 
 // ─── Main Component ─────────────────────────────────────────
 
@@ -209,17 +204,9 @@ export const AgentChatView = ({ agentId }: AgentChatViewProps) => {
 
   // Build the Static items array. Must be called unconditionally (before any
   // early return) to satisfy the Rules of Hooks.
-  const staticItems = useMemo(() => {
-    const truncatedCount = Math.max(
-      0,
-      committedItems.length - AGENT_STATIC_HISTORY_WINDOW,
-    );
-    const visibleItems =
-      truncatedCount > 0
-        ? committedItems.slice(-AGENT_STATIC_HISTORY_WINDOW)
-        : committedItems;
-
-    return [
+  // NOTE: Ink's <Static> tracks rendered items by array INDEX (not React key).
+  // The array must only ever grow — never shrink or stay constant length.
+  const staticItems = useMemo(() => [
       <AgentHeader
         key="agent-header"
         modelId={agentModelId}
@@ -227,15 +214,7 @@ export const AgentChatView = ({ agentId }: AgentChatViewProps) => {
         workingDirectory={agentWorkingDir}
         gitBranch={agentGitBranch}
       />,
-      ...(truncatedCount > 0
-        ? [
-            <TruncatedHistoryBanner
-              key="truncated-banner"
-              count={truncatedCount}
-            />,
-          ]
-        : []),
-      ...visibleItems.map((item) => (
+      ...committedItems.map((item) => (
         <HistoryItemDisplay
           key={item.id}
           item={item}
@@ -244,8 +223,7 @@ export const AgentChatView = ({ agentId }: AgentChatViewProps) => {
           mainAreaWidth={contentWidth}
         />
       )),
-    ];
-  }, [
+    ], [
     committedItems,
     agentModelId,
     agent?.modelName,
@@ -270,8 +248,7 @@ export const AgentChatView = ({ agentId }: AgentChatViewProps) => {
       {/* Committed message history.
           key includes historyRemountKey: when refreshStatic() clears the
           terminal it bumps the key, forcing Static to remount and re-emit
-          all items on the cleared screen. The windowed slice limits
-          reprint cost to AGENT_STATIC_HISTORY_WINDOW items max. */}
+          all items on the cleared screen. */}
       <Static key={`agent-${agentId}-${historyRemountKey}`} items={staticItems}>
         {(item) => item}
       </Static>

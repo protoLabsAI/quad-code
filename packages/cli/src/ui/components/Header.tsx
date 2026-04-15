@@ -114,10 +114,15 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Left side: ASCII logo (only if enough space) */}
       {showLogo && (
         <>
-          <Box flexShrink={0}>
-            <Gradient colors={gradientColors}>
-              <Text>{displayLogo}</Text>
-            </Gradient>
+          <Box flexShrink={0} flexDirection="column">
+            {displayLogo
+              .split('\n')
+              .slice(1) // trim leading empty line from template literal
+              .map((line, i) => (
+                <Gradient key={i} colors={gradientColors}>
+                  <Text>{line.padEnd(logoWidth)}</Text>
+                </Gradient>
+              ))}
           </Box>
           {/* Fixed gap between logo and info panel */}
           <Box width={logoGap} />

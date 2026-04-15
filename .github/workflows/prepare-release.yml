@@ -105,5 +105,5 @@ jobs:
           )
           echo "Created PR: ${PR_URL}"
 
-          gh pr merge "${PR_URL}" --auto --squash
-          echo "Auto-merge enabled on ${PR_URL}"
+          gh pr merge "${PR_URL}" --squash --admin
+          echo "Merged ${PR_URL}"
