@@ -10,13 +10,12 @@ import type { AuthMethod } from '@agentclientprotocol/sdk';
 export function buildAuthMethods(): AuthMethod[] {
   return [
     {
-      id: AuthType.USE_ANTHROPIC,
-      name: 'Use Anthropic API key',
-      description:
-        'Requires setting the `ANTHROPIC_API_KEY` environment variable',
+      id: AuthType.USE_OPENAI,
+      name: 'Use OpenAI API key',
+      description: 'Requires setting the `OPENAI_API_KEY` environment variable',
       _meta: {
         type: 'terminal',
-        args: ['--auth-type=anthropic'],
+        args: ['--auth-type=openai'],
       },
     },
   ];

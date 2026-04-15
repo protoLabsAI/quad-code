@@ -291,7 +291,7 @@ function setupAcpTest(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((initResult as any).agentInfo.version).toBeDefined();
 
-      await sendRequest('authenticate', { methodId: 'anthropic' });
+      await sendRequest('authenticate', { methodId: 'openai' });
 
       const newSession = (await sendRequest('session/new', {
         cwd: rig.testDir!,
@@ -333,7 +333,7 @@ function setupAcpTest(
       expect(initResult.protocolVersion).toBe(1);
 
       // Test 2: Authenticate
-      await sendRequest('authenticate', { methodId: 'anthropic' });
+      await sendRequest('authenticate', { methodId: 'openai' });
 
       // Test 3: Create a new session
       const newSession = (await sendRequest('session/new', {
@@ -378,8 +378,7 @@ function setupAcpTest(
     }
   });
 
-  // Skipped: qwen-oauth model type is Qwen-specific and does not exist in protoCLI.
-  it.skip('returns internal error details when model auth is required', async () => {
+  it('returns internal error details when model auth is required', async () => {
     const rig = new TestRig();
     rig.setup('acp auth methods in error data');
 
@@ -449,7 +448,7 @@ function setupAcpTest(
         },
       });
 
-      await sendRequest('authenticate', { methodId: 'anthropic' });
+      await sendRequest('authenticate', { methodId: 'openai' });
 
       // Create a new session
       const newSession = (await sendRequest('session/new', {
@@ -497,16 +496,16 @@ function setupAcpTest(
       expect(modelOption!.currentValue).toBeTruthy();
 
       // Test: Set model using set_config_option
-      // Use anthropic model to avoid auth issues
-      const anthropicModel = newSession.models.availableModels.find((model) =>
-        model.modelId.includes('anthropic'),
+      // Use openai model to avoid auth issues
+      const openaiModel = newSession.models.availableModels.find((model) =>
+        model.modelId.includes('openai'),
       );
-      expect(anthropicModel).toBeDefined();
+      expect(openaiModel).toBeDefined();
 
       const setModelResult = (await sendRequest('session/set_config_option', {
         sessionId: newSession.sessionId,
         configId: 'model',
-        value: anthropicModel!.modelId,
+        value: openaiModel!.modelId,
       })) as {
         configOptions: Array<{
           id: string;
@@ -523,7 +522,7 @@ function setupAcpTest(
         (opt) => opt.id === 'model',
       );
       expect(updatedModelOption).toBeDefined();
-      expect(updatedModelOption!.currentValue).toBe(anthropicModel!.modelId);
+      expect(updatedModelOption!.currentValue).toBe(openaiModel!.modelId);
     } catch (e) {
       if (stderr.length) {
         console.error('Agent stderr:', stderr.join(''));
@@ -549,7 +548,7 @@ function setupAcpTest(
         },
       });
 
-      await sendRequest('authenticate', { methodId: 'anthropic' });
+      await sendRequest('authenticate', { methodId: 'openai' });
 
       // Create a new session
       const newSession = (await sendRequest('session/new', {
@@ -596,7 +595,7 @@ function setupAcpTest(
         },
       });
 
-      await sendRequest('authenticate', { methodId: 'anthropic' });
+      await sendRequest('authenticate', { methodId: 'openai' });
 
       // Create a new session
       const newSession = (await sendRequest('session/new', {
@@ -672,7 +671,7 @@ function setupAcpTest(
         },
       });
 
-      await sendRequest('authenticate', { methodId: 'anthropic' });
+      await sendRequest('authenticate', { methodId: 'openai' });
 
       // Create a new session
       const newSession = (await sendRequest('session/new', {
@@ -782,7 +781,7 @@ function setupAcpTest(
         protocolVersion: 1,
         clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
       });
-      await sendRequest('authenticate', { methodId: 'anthropic' });
+      await sendRequest('authenticate', { methodId: 'openai' });
 
       const newSession = (await sendRequest('session/new', {
         cwd: rig.testDir!,
@@ -869,7 +868,7 @@ function setupAcpTest(
         protocolVersion: 1,
         clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
       });
-      await sendRequest('authenticate', { methodId: 'anthropic' });
+      await sendRequest('authenticate', { methodId: 'openai' });
 
       const newSession = (await sendRequest('session/new', {
         cwd: rig.testDir!,
@@ -932,7 +931,7 @@ function setupAcpTest(
         expect(stderrOutput).toContain('--experimental-acp is deprecated');
         expect(stderrOutput).toContain('Please use --acp instead');
 
-        await sendRequest('authenticate', { methodId: 'anthropic' });
+        await sendRequest('authenticate', { methodId: 'openai' });
 
         const newSession = (await sendRequest('session/new', {
           cwd: rig.testDir!,
@@ -977,7 +976,7 @@ function setupAcpTest(
         const stderrOutput = stderr.join('');
         expect(stderrOutput).not.toContain('--experimental-acp is deprecated');
 
-        await sendRequest('authenticate', { methodId: 'anthropic' });
+        await sendRequest('authenticate', { methodId: 'openai' });
 
         const newSession = (await sendRequest('session/new', {
           cwd: rig.testDir!,

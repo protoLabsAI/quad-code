@@ -274,7 +274,7 @@ async function initSession(
     },
   });
 
-  await sendRequest('authenticate', { methodId: 'anthropic' });
+  await sendRequest('authenticate', { methodId: 'openai' });
 
   const newSession = (await sendRequest('session/new', {
     cwd: testDir,
