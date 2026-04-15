@@ -71,7 +71,7 @@ export class SchemaValidator {
     if (!schema) {
       return null;
     }
-    if (typeof data !== 'object' || data === null) {
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
       return 'Value of params must be an object';
     }
 

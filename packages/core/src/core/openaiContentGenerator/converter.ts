@@ -713,7 +713,21 @@ export class OpenAIContentConverter {
       };
     }
 
-    // Cast to OpenAI type - some OpenAI-compatible APIs support richer content in tool messages
+    // For text-only responses (no media), use plain string content.
+    // Many OpenAI-compatible providers (LiteLLM, local models) only accept
+    // string content in tool messages and crash on array content parts.
+    const hasMediaParts = contentParts.some((p) => p.type !== 'text');
+    if (!hasMediaParts) {
+      return {
+        role: 'tool' as const,
+        tool_call_id: response.id || '',
+        content: contentParts
+          .map((p) => (p as OpenAI.Chat.ChatCompletionContentPartText).text)
+          .join('\n'),
+      };
+    }
+
+    // Multi-modal response — use array format for providers that support it
     return {
       role: 'tool' as const,
       tool_call_id: response.id || '',
