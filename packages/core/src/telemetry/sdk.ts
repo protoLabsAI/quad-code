@@ -19,14 +19,8 @@ import {
   BatchSpanProcessor,
   ConsoleSpanExporter,
 } from '@opentelemetry/sdk-trace-node';
-import {
-  BatchLogRecordProcessor,
-  ConsoleLogRecordExporter,
-} from '@opentelemetry/sdk-logs';
-import {
-  ConsoleMetricExporter,
-  PeriodicExportingMetricReader,
-} from '@opentelemetry/sdk-metrics';
+import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
+import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import type { Config } from '../config/config.js';
 import { SERVICE_NAME } from './constants.js';
@@ -47,7 +41,13 @@ if (process.env?.['PROTO_OTEL_DEBUG']) {
 let sdk: NodeSDK | undefined;
 let telemetryInitialized = false;
 
-function buildLangfuseSpanProcessor(): BatchSpanProcessor | null {
+interface LangfuseExporters {
+  spanProcessor: BatchSpanProcessor;
+  logExporter: OTLPLogExporterHttp;
+  metricExporter: OTLPMetricExporterHttp;
+}
+
+function buildLangfuseExporters(): LangfuseExporters | null {
   const publicKey = process.env['LANGFUSE_PUBLIC_KEY'];
   const secretKey = process.env['LANGFUSE_SECRET_KEY'];
   const baseUrl =
@@ -60,12 +60,24 @@ function buildLangfuseSpanProcessor(): BatchSpanProcessor | null {
   const credentials = Buffer.from(`${publicKey}:${secretKey}`).toString(
     'base64',
   );
-  const exporter = new OTLPTraceExporterHttp({
-    url: `${baseUrl}/api/public/otel/v1/traces`,
-    headers: { Authorization: `Basic ${credentials}` },
+  const headers = { Authorization: `Basic ${credentials}` };
+
+  const spanProcessor = new BatchSpanProcessor(
+    new OTLPTraceExporterHttp({
+      url: `${baseUrl}/api/public/otel/v1/traces`,
+      headers,
+    }),
+  );
+  const logExporter = new OTLPLogExporterHttp({
+    url: `${baseUrl}/api/public/otel/v1/logs`,
+    headers,
+  });
+  const metricExporter = new OTLPMetricExporterHttp({
+    url: `${baseUrl}/api/public/otel/v1/metrics`,
+    headers,
   });
 
-  return new BatchSpanProcessor(exporter);
+  return { spanProcessor, logExporter, metricExporter };
 }
 
 export function isTelemetrySdkInitialized(): boolean {
@@ -98,11 +110,8 @@ function parseOtlpEndpoint(
 }
 
 export function initializeTelemetry(config: Config): void {
-  const langfuseProcessor = buildLangfuseSpanProcessor();
-  if (
-    telemetryInitialized ||
-    (!config.getTelemetryEnabled() && !langfuseProcessor)
-  ) {
+  const langfuse = buildLangfuseExporters();
+  if (telemetryInitialized || (!config.getTelemetryEnabled() && !langfuse)) {
     return;
   }
 
@@ -119,10 +128,8 @@ export function initializeTelemetry(config: Config): void {
   const telemetryOutfile = config.getTelemetryOutfile();
   const useOtlp = !!parsedEndpoint && !telemetryOutfile;
 
-  // No destination configured — Langfuse handles traces via its own processor,
-  // but if there's no OTLP endpoint and no outfile we have nowhere to send
-  // spans/logs/metrics. Skip SDK init to avoid flooding the console.
-  if (!useOtlp && !telemetryOutfile && !langfuseProcessor) {
+  // No destination configured — skip SDK init to avoid flooding the console.
+  if (!useOtlp && !telemetryOutfile && !langfuse) {
     return;
   }
 
@@ -131,11 +138,7 @@ export function initializeTelemetry(config: Config): void {
     | OTLPTraceExporterHttp
     | FileSpanExporter
     | ConsoleSpanExporter;
-  let logExporter:
-    | OTLPLogExporter
-    | OTLPLogExporterHttp
-    | FileLogExporter
-    | ConsoleLogRecordExporter;
+  let logExporter: OTLPLogExporter | OTLPLogExporterHttp | FileLogExporter;
   let metricReader: PeriodicExportingMetricReader;
 
   if (useOtlp) {
@@ -178,25 +181,22 @@ export function initializeTelemetry(config: Config): void {
       exportIntervalMillis: 10000,
     });
   } else {
-    // Langfuse-only path: no OTLP endpoint and no outfile.
-    // Use console exporters as a no-op placeholder — Langfuse handles its own
-    // spans via the processor below, so these will never emit anything.
-    spanExporter = new ConsoleSpanExporter();
-    logExporter = new ConsoleLogRecordExporter();
+    // Langfuse-only: route logs and metrics to Langfuse OTLP endpoints so they
+    // don't fall back to the console exporters and spam the terminal.
+    spanExporter = new ConsoleSpanExporter(); // unused — langfuse.spanProcessor handles spans
+    logExporter = langfuse!.logExporter;
     metricReader = new PeriodicExportingMetricReader({
-      exporter: new ConsoleMetricExporter(),
+      exporter: langfuse!.metricExporter,
       exportIntervalMillis: 10000,
     });
   }
 
-  // When Langfuse is the only destination (no OTLP/file), skip span/log/metric
-  // SDK processors to avoid console spam — Langfuse uses its own processor.
   const spanProcessors: BatchSpanProcessor[] = [];
   if (useOtlp || telemetryOutfile) {
     spanProcessors.push(new BatchSpanProcessor(spanExporter!));
   }
-  if (langfuseProcessor) {
-    spanProcessors.push(langfuseProcessor);
+  if (langfuse) {
+    spanProcessors.push(langfuse.spanProcessor);
     debugLogger.debug('Langfuse span processor enabled.');
   }
 

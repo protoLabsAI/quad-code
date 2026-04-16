@@ -177,32 +177,6 @@ export function recordObservationMask(opts: {
 }
 
 /**
- * Record a sprint contract activation event.
- */
-export function recordSprintContract(opts: {
-  task: string;
-  fileCount: number;
-  criteriaCount: number;
-}): void {
-  const ctx = getActiveTurnContext() ?? context.active();
-  const span = tracer.startSpan(
-    'harness.sprint_contract',
-    {
-      kind: SpanKind.INTERNAL,
-      attributes: {
-        'harness.contract.task': opts.task,
-        'harness.contract.file_count': opts.fileCount,
-        'harness.contract.criteria_count': opts.criteriaCount,
-        'langfuse.observation.name': 'harness.sprint_contract',
-      },
-    },
-    ctx,
-  );
-  span.setStatus({ code: SpanStatusCode.OK });
-  span.end();
-}
-
-/**
  * Record a harness reminder injection event.
  */
 export function recordHarnessReminder(opts: {

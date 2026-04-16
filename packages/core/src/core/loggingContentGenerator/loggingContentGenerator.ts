@@ -21,6 +21,13 @@ import {
 } from '@google/genai';
 import type OpenAI from 'openai';
 import {
+  trace,
+  context as otelContext,
+  SpanKind,
+  SpanStatusCode,
+  type Span,
+} from '@opentelemetry/api';
+import {
   ApiRequestEvent,
   ApiResponseEvent,
   ApiErrorEvent,
@@ -31,6 +38,9 @@ import {
   logApiRequest,
   logApiResponse,
 } from '../../telemetry/loggers.js';
+import { getActiveTurnContext } from '../../telemetry/turnSpanContext.js';
+
+const llmTracer = trace.getTracer('proto.llm', '1.0.0');
 import type {
   ContentGenerator,
   ContentGeneratorConfig,
@@ -142,23 +152,51 @@ export class LoggingContentGenerator implements ContentGenerator {
     req: GenerateContentParameters,
     userPromptId: string,
   ): Promise<GenerateContentResponse> {
+    const turnCtx = getActiveTurnContext() ?? otelContext.active();
+    const span = llmTracer.startSpan(
+      'llm.generate',
+      {
+        kind: SpanKind.CLIENT,
+        attributes: {
+          'llm.model': req.model,
+          'llm.prompt_id': userPromptId,
+          'llm.streaming': false,
+        },
+      },
+      turnCtx,
+    );
+
     const startTime = Date.now();
     this.logApiRequest(this.toContents(req.contents), req.model, userPromptId);
     const openaiRequest = await this.buildOpenAIRequestForLogging(req);
     try {
       const response = await this.wrapped.generateContent(req, userPromptId);
       const durationMs = Date.now() - startTime;
+      const usage = response.usageMetadata;
+      if (usage) {
+        span.setAttributes({
+          'llm.usage.input_tokens': usage.promptTokenCount ?? 0,
+          'llm.usage.output_tokens': usage.candidatesTokenCount ?? 0,
+          'llm.usage.total_tokens': usage.totalTokenCount ?? 0,
+        });
+      }
+      span.setAttribute('llm.duration_ms', durationMs);
+      span.setStatus({ code: SpanStatusCode.OK });
+      span.end();
       this._logApiResponse(
         response.responseId ?? '',
         durationMs,
         response.modelVersion || req.model,
         userPromptId,
-        response.usageMetadata,
+        usage,
       );
       await this.logOpenAIInteraction(openaiRequest, response);
       return response;
     } catch (error) {
       const durationMs = Date.now() - startTime;
+      span.setAttribute('llm.duration_ms', durationMs);
+      span.setStatus({ code: SpanStatusCode.ERROR });
+      span.end();
       this._logApiError('', durationMs, error, req.model, userPromptId);
       await this.logOpenAIInteraction(openaiRequest, undefined, error);
       throw error;
@@ -169,6 +207,20 @@ export class LoggingContentGenerator implements ContentGenerator {
     req: GenerateContentParameters,
     userPromptId: string,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
+    const turnCtx = getActiveTurnContext() ?? otelContext.active();
+    const span = llmTracer.startSpan(
+      'llm.generate',
+      {
+        kind: SpanKind.CLIENT,
+        attributes: {
+          'llm.model': req.model,
+          'llm.prompt_id': userPromptId,
+          'llm.streaming': true,
+        },
+      },
+      turnCtx,
+    );
+
     const startTime = Date.now();
     this.logApiRequest(this.toContents(req.contents), req.model, userPromptId);
     const openaiRequest = await this.buildOpenAIRequestForLogging(req);
@@ -178,6 +230,9 @@ export class LoggingContentGenerator implements ContentGenerator {
       stream = await this.wrapped.generateContentStream(req, userPromptId);
     } catch (error) {
       const durationMs = Date.now() - startTime;
+      span.setAttribute('llm.duration_ms', durationMs);
+      span.setStatus({ code: SpanStatusCode.ERROR });
+      span.end();
       this._logApiError('', durationMs, error, req.model, userPromptId);
       await this.logOpenAIInteraction(openaiRequest, undefined, error);
       throw error;
@@ -189,6 +244,7 @@ export class LoggingContentGenerator implements ContentGenerator {
       userPromptId,
       req.model,
       openaiRequest,
+      span,
     );
   }
 
@@ -198,6 +254,7 @@ export class LoggingContentGenerator implements ContentGenerator {
     userPromptId: string,
     model: string,
     openaiRequest?: OpenAI.Chat.ChatCompletionCreateParams,
+    span?: Span,
   ): AsyncGenerator<GenerateContentResponse> {
     const responses: GenerateContentResponse[] = [];
 
@@ -212,6 +269,19 @@ export class LoggingContentGenerator implements ContentGenerator {
       }
       // Only log successful API response if no error occurred
       const durationMs = Date.now() - startTime;
+      if (span) {
+        if (lastUsageMetadata) {
+          span.setAttributes({
+            'llm.usage.input_tokens': lastUsageMetadata.promptTokenCount ?? 0,
+            'llm.usage.output_tokens':
+              lastUsageMetadata.candidatesTokenCount ?? 0,
+            'llm.usage.total_tokens': lastUsageMetadata.totalTokenCount ?? 0,
+          });
+        }
+        span.setAttribute('llm.duration_ms', durationMs);
+        span.setStatus({ code: SpanStatusCode.OK });
+        span.end();
+      }
       this._logApiResponse(
         responses[0]?.responseId ?? '',
         durationMs,
@@ -224,6 +294,11 @@ export class LoggingContentGenerator implements ContentGenerator {
       await this.logOpenAIInteraction(openaiRequest, consolidatedResponse);
     } catch (error) {
       const durationMs = Date.now() - startTime;
+      if (span) {
+        span.setAttribute('llm.duration_ms', durationMs);
+        span.setStatus({ code: SpanStatusCode.ERROR });
+        span.end();
+      }
       this._logApiError(
         responses[0]?.responseId ?? '',
         durationMs,
