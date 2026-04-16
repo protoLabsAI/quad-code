@@ -1314,6 +1314,12 @@ export class Config {
       return;
     }
 
+    // Strip thinking blocks from conversation history on model switch.
+    // reasoning_content is a non-standard field that causes strict
+    // OpenAI-compatible providers to reject requests with 422 errors
+    // when thought parts from a previous model leak into the payload (#3304).
+    this.geminiClient.stripThoughtsFromHistory();
+
     // Full refresh path
     await this.refreshAuth(authType);
   }
