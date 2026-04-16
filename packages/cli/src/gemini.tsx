@@ -11,6 +11,7 @@ import {
   Storage,
   type Config,
   createDebugLogger,
+  shutdownTelemetry,
 } from '@qwen-code/qwen-code-core';
 import { render } from 'ink';
 import dns from 'node:dns';
@@ -366,6 +367,8 @@ export async function main() {
     // Register cleanup for MCP clients as early as possible
     // This ensures MCP server subprocesses are properly terminated on exit
     registerCleanup(() => config.shutdown());
+    // Flush OTel spans/logs/metrics before exit
+    registerCleanup(() => shutdownTelemetry());
 
     // FIXME: list extensions after the config initialize
     // if (config.getListExtensions()) {

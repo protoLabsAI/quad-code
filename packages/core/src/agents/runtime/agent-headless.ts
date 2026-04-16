@@ -14,6 +14,12 @@
  * For persistent interactive agents, see AgentInteractive (Phase 2).
  */
 
+import {
+  trace,
+  context as otelContext,
+  SpanKind,
+  SpanStatusCode,
+} from '@opentelemetry/api';
 import type { Config } from '../../config/config.js';
 import { createDebugLogger } from '../../utils/debugLogger.js';
 import type {
@@ -34,8 +40,11 @@ import type {
 import { AgentTerminateMode } from './agent-types.js';
 import { logSubagentExecution } from '../../telemetry/loggers.js';
 import { SubagentExecutionEvent } from '../../telemetry/types.js';
+import { getActiveTurnContext } from '../../telemetry/turnSpanContext.js';
 import { AgentCore } from './agent-core.js';
 import { DEFAULT_QWEN_MODEL } from '../../config/models.js';
+
+const agentTracer = trace.getTracer('proto.agent', '1.0.0');
 
 const debugLogger = createDebugLogger('SUBAGENT');
 
@@ -225,6 +234,24 @@ export class AgentHeadless {
     this.core.executionStats.startTimeMs = startTime;
     this.core.stats.start(startTime);
 
+    const parentCtx = getActiveTurnContext() ?? otelContext.active();
+    const agentSpan = agentTracer.startSpan(
+      'agent.execute',
+      {
+        kind: SpanKind.INTERNAL,
+        attributes: {
+          'agent.name': this.core.name,
+          'agent.model':
+            this.core.modelConfig.model ||
+            this.core.runtimeContext.getModel() ||
+            DEFAULT_QWEN_MODEL,
+          'agent.max_turns': this.core.runConfig.max_turns ?? -1,
+        },
+      },
+      parentCtx,
+    );
+    const agentCtx = trace.setSpan(parentCtx, agentSpan);
+
     try {
       // Emit start event
       this.core.eventEmitter?.emit(AgentEventType.START, {
@@ -244,24 +271,28 @@ export class AgentHeadless {
       const startEvent = new SubagentExecutionEvent(this.core.name, 'started');
       logSubagentExecution(this.core.runtimeContext, startEvent);
 
-      // Delegate to AgentCore's reasoning loop
-      const result = await this.core.runReasoningLoop(
-        chat,
-        initialMessages,
-        toolsList,
-        abortController,
-        {
-          maxTurns: this.core.runConfig.max_turns,
-          maxTimeMinutes: this.core.runConfig.max_time_minutes,
-          startTimeMs: startTime,
-        },
+      // Delegate to AgentCore's reasoning loop within the agent span context
+      const result = await otelContext.with(agentCtx, () =>
+        this.core.runReasoningLoop(
+          chat,
+          initialMessages,
+          toolsList,
+          abortController,
+          {
+            maxTurns: this.core.runConfig.max_turns,
+            maxTimeMinutes: this.core.runConfig.max_time_minutes,
+            startTimeMs: startTime,
+          },
+        ),
       );
 
       this.finalText = result.text;
       this.terminateMode = result.terminateMode ?? AgentTerminateMode.GOAL;
+      agentSpan.setStatus({ code: SpanStatusCode.OK });
     } catch (error) {
       debugLogger.error('Error during subagent execution:', error);
       this.terminateMode = AgentTerminateMode.ERROR;
+      agentSpan.setStatus({ code: SpanStatusCode.ERROR });
       this.core.eventEmitter?.emit(AgentEventType.ERROR, {
         subagentId: this.core.subagentId,
         error: error instanceof Error ? error.message : String(error),
@@ -270,6 +301,8 @@ export class AgentHeadless {
 
       throw error;
     } finally {
+      agentSpan.setAttribute('agent.duration_ms', Date.now() - startTime);
+      agentSpan.end();
       if (externalSignal) {
         externalSignal.removeEventListener('abort', onExternalAbort);
       }
