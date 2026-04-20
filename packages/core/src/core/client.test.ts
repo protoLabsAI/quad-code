@@ -31,7 +31,12 @@ import {
   Turn,
   type ChatCompressionInfo,
 } from './turn.js';
-import { getCoreSystemPrompt, getCustomSystemPrompt } from './prompts.js';
+import {
+  assemblePromptSections,
+  getCoreSystemPrompt,
+  getCustomSystemPrompt,
+  type PromptSection,
+} from './prompts.js';
 import { DEFAULT_QWEN_FLASH_MODEL } from '../config/models.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { promptIdContext } from '../utils/promptIdContext.js';
@@ -279,6 +284,17 @@ describe('Gemini Client (client.ts)', () => {
       dynamicSuffix: '',
       full: 'mock system prompt',
     });
+
+    // assemblePromptSections is also mocked by vi.mock('./prompts'); give it a
+    // pass-through implementation so getMainSessionSystemInstruction() produces
+    // a usable string rather than undefined.
+    vi.mocked(assemblePromptSections).mockImplementation(
+      (sections: PromptSection[]) =>
+        sections
+          .filter((s) => s.content)
+          .map((s) => s.content)
+          .join('\n\n'),
+    );
 
     mockGenerateContentFn = vi.fn().mockResolvedValue({
       candidates: [{ content: { parts: [{ text: '{"key": "value"}' }] } }],

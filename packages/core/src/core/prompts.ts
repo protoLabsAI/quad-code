@@ -38,6 +38,46 @@ export interface StructuredSystemPrompt {
  */
 export const CACHE_BOUNDARY_SENTINEL = '\n__CACHE_BOUNDARY__\n';
 
+/**
+ * Volatility tiers for prompt sections.
+ *
+ * - `stable`    — core identity and instructions; never changes between turns.
+ *                 Suitable for prompt caching.
+ * - `workspace` — project/session-level context (MCP instructions, capability
+ *                 manifest, user memory). Changes when the workspace or tool set
+ *                 changes, but not on every turn.
+ * - `run`       — per-turn content (permission blockers, transient reminders).
+ *                 Always placed after the cache boundary.
+ */
+export type PromptVolatility = 'stable' | 'workspace' | 'run';
+
+export interface PromptSection {
+  volatility: PromptVolatility;
+  content: string;
+}
+
+/**
+ * Assembles tagged prompt sections into a single string.
+ *
+ * Sections are ordered: stable → workspace → run. The `CACHE_BOUNDARY_SENTINEL`
+ * is inserted between the last stable section and the first non-stable section
+ * so providers can apply prompt-cache control to the stable prefix only.
+ */
+export function assemblePromptSections(sections: PromptSection[]): string {
+  const stable = sections.filter((s) => s.volatility === 'stable' && s.content);
+  const workspace = sections.filter(
+    (s) => s.volatility === 'workspace' && s.content,
+  );
+  const run = sections.filter((s) => s.volatility === 'run' && s.content);
+
+  const stablePart = stable.map((s) => s.content).join('\n\n');
+  const nonStable = [...workspace, ...run].map((s) => s.content).join('\n\n');
+
+  if (!stablePart) return nonStable;
+  if (!nonStable) return stablePart;
+  return `${stablePart}${CACHE_BOUNDARY_SENTINEL}${nonStable}`;
+}
+
 export function resolvePathFromEnv(envVar?: string): {
   isSwitch: boolean;
   value: string | null;
@@ -337,7 +377,7 @@ When you encounter an obstacle, do not resort to destructive shortcuts. Investig
 - **Directory Listing:** Use '${ToolNames.LS}' to list the contents of a directory. Prefer '${ToolNames.GLOB}' when you need to find files by pattern and '${ToolNames.GREP}' when searching file contents — use '${ToolNames.LS}' only when you need to enumerate a directory's direct children.
 - **Web Fetch:** Use '${ToolNames.WEB_FETCH}' to retrieve and analyze content from a URL. Pass a focused prompt describing what to extract. If an MCP-provided web tool is available (any tool starting with \`mcp__\`), prefer it over '${ToolNames.WEB_FETCH}'.
 - **LSP (Code Intelligence):** When an LSP server is active, use '${ToolNames.LSP}' as the primary tool for code intelligence queries (go-to-definition, find-references, hover, symbols, diagnostics). Do NOT use '${ToolNames.GREP}' or '${ToolNames.GLOB}' for these queries when LSP is available — LSP results are semantically accurate where text search is not.
-- **Scheduled Jobs (Cron):** Use '${ToolNames.CRON_CREATE}' to schedule a prompt to run at a future time (one-shot or recurring). Use '${ToolNames.CRON_LIST}' to inspect active jobs. Use '${ToolNames.CRON_DELETE}' to cancel a job by ID. Jobs are session-only — they are gone when the session ends. Recurring jobs auto-expire after 3 days.
+- **Scheduled Jobs (Cron):** Use '${ToolNames.CRON_CREATE}' to schedule a prompt to run at a future time (one-shot or recurring). Use '${ToolNames.CRON_LIST}' to inspect active jobs. Use '${ToolNames.CRON_DELETE}' to cancel a job by ID. Jobs persist across sessions and are saved to disk. Recurring jobs auto-expire after 3 days.
 - **Respect User Confirmations:** Most tool calls (also denoted as 'function calls') will first require confirmation from the user, where they will either approve or cancel the function call. If a user cancels a function call, respect their choice and do _not_ try to make the function call again. It is okay to request the tool call again _only_ if the user requests that same tool call on a subsequent prompt. When a user cancels a function call, assume best intentions from the user and consider inquiring if they prefer any alternative paths forward.
 
 ## Interaction Details
@@ -1220,4 +1260,41 @@ Call respond_in_schema function with A VALID JSON OBJECT as argument:
  */
 export function getInsightPrompt(type: InsightPromptType): string {
   return INSIGHT_PROMPTS[type];
+}
+
+/**
+ * Builds a compact capability manifest from the active tool registry.
+ * Focuses on session-variable content (MCP tools, skills) that the agent
+ * might not know about without explicit enumeration.
+ *
+ * Returns null when there is nothing session-specific to report.
+ */
+export function buildCapabilityManifest(
+  mcpToolsByServer: Map<string, string[]>,
+  activeSkills: Array<{ name: string; description: string }>,
+): string | null {
+  const sections: string[] = [];
+
+  if (mcpToolsByServer.size > 0) {
+    const lines: string[] = ['**MCP tools available this session:**'];
+    for (const [server, tools] of mcpToolsByServer) {
+      lines.push(`  • ${server}: ${tools.join(', ')}`);
+    }
+    sections.push(lines.join('\n'));
+  }
+
+  if (activeSkills.length > 0) {
+    const lines: string[] = ['**Skills (invoke via /skill or agent tool):**'];
+    for (const skill of activeSkills) {
+      const desc = skill.description
+        ? ` — ${skill.description.slice(0, 80)}${skill.description.length > 80 ? '…' : ''}`
+        : '';
+      lines.push(`  • /${skill.name}${desc}`);
+    }
+    sections.push(lines.join('\n'));
+  }
+
+  if (sections.length === 0) return null;
+
+  return `# Active Capabilities\n\n${sections.join('\n\n')}`;
 }

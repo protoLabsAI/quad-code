@@ -42,6 +42,7 @@ import {
 } from '../services/fileSystemService.js';
 import { GitService } from '../services/gitService.js';
 import { CronScheduler } from '../services/cronScheduler.js';
+import { PermissionBlockerService } from '../services/permissionBlockerService.js';
 import { SprintContractService } from '../services/sprintContractService.js';
 
 // Tools
@@ -601,6 +602,7 @@ export class Config {
   private geminiClient!: GeminiClient;
   private baseLlmClient!: BaseLlmClient;
   private cronScheduler: CronScheduler | null = null;
+  private permissionBlockerService: PermissionBlockerService | null = null;
   private readonly fileFiltering: {
     respectGitIgnore: boolean;
     respectQwenIgnore: boolean;
@@ -1790,9 +1792,20 @@ export class Config {
 
   getCronScheduler(): CronScheduler {
     if (!this.cronScheduler) {
-      this.cronScheduler = new CronScheduler();
+      this.cronScheduler = new CronScheduler(
+        this.storage.getProjectCronJobsPath(),
+      );
     }
     return this.cronScheduler;
+  }
+
+  getPermissionBlockerService(): PermissionBlockerService {
+    if (!this.permissionBlockerService) {
+      this.permissionBlockerService = new PermissionBlockerService(
+        this.storage.getProjectBlockersPath(),
+      );
+    }
+    return this.permissionBlockerService;
   }
 
   isCronEnabled(): boolean {

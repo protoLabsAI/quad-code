@@ -1435,6 +1435,26 @@ export const useGeminiStream = (
             })
             .catch(() => {});
 
+          // Fire-and-forget evolve pass: detect reusable skill patterns every N turns
+          import('@qwen-code/qwen-code-core')
+            .then((core) => {
+              if (core.runEvolvePass && config) {
+                const history = geminiClient.getHistory?.() ?? [];
+                const recentMessages: Array<{ role: string; text: string }> =
+                  [];
+                for (const entry of history.slice(-20)) {
+                  const text = (entry.parts ?? [])
+                    .map((p: { text?: string }) => p.text ?? '')
+                    .join(' ')
+                    .trim();
+                  if (text)
+                    recentMessages.push({ role: entry.role as string, text });
+                }
+                core.runEvolvePass(config, recentMessages).catch(() => {});
+              }
+            })
+            .catch(() => {});
+
           // Fire-and-forget timed microcompact: clear old tool-result bodies
           // on a timer (default 10 min) to reduce context without an LLM call.
           import('@qwen-code/qwen-code-core')

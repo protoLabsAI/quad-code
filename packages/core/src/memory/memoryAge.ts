@@ -4,7 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { MemoryType } from './types.js';
+
 const DAY_MS = 86_400_000;
+
+/**
+ * Staleness thresholds (in days) per memory type.
+ * null = never stale (stable across time).
+ */
+export const STALENESS_THRESHOLDS: Record<MemoryType, number | null> = {
+  user: null,
+  feedback: null,
+  project: 21,
+  reference: 7,
+};
+
+/**
+ * Verification guidance per memory type shown when stale.
+ */
+const VERIFICATION_GUIDANCE: Record<MemoryType, string> = {
+  user: '',
+  feedback: '',
+  project: 'verify this is still current before acting',
+  reference: 're-confirm this reference before using it',
+};
 
 /**
  * Format a timestamp as a human-readable age string.
@@ -23,16 +46,39 @@ export function formatAge(mtimeMs: number): string {
 }
 
 /**
- * Check if a memory is stale (older than threshold).
+ * Check if a memory is stale based on its type's threshold.
+ * Returns false for types with no staleness threshold.
  */
-export function isStale(mtimeMs: number, thresholdDays = 30): boolean {
-  return Date.now() - mtimeMs > thresholdDays * DAY_MS;
+export function isStale(
+  mtimeMs: number,
+  type?: MemoryType,
+  thresholdDays?: number,
+): boolean {
+  let threshold = thresholdDays;
+  if (threshold === undefined) {
+    if (type) {
+      const typedThreshold = STALENESS_THRESHOLDS[type];
+      if (typedThreshold === null) return false;
+      threshold = typedThreshold;
+    } else {
+      threshold = 30;
+    }
+  }
+  return Date.now() - mtimeMs > threshold * DAY_MS;
 }
 
 /**
- * Get a staleness warning for old memories. Returns null for fresh ones.
+ * Get a staleness warning for a memory entry.
+ * Returns null when the memory is fresh or has no staleness threshold.
  */
-export function getStaleWarning(mtimeMs: number): string | null {
-  if (!isStale(mtimeMs)) return null;
-  return `(${formatAge(mtimeMs)} — may be outdated, verify before acting)`;
+export function getStaleWarning(
+  mtimeMs: number,
+  type?: MemoryType,
+): string | null {
+  if (!isStale(mtimeMs, type)) return null;
+  const age = formatAge(mtimeMs);
+  const guidance = type ? VERIFICATION_GUIDANCE[type] : '';
+  return guidance
+    ? `(last updated ${age} — ${guidance})`
+    : `(last updated ${age} — may be outdated)`;
 }
