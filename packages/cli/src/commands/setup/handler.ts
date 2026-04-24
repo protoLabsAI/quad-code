@@ -36,7 +36,7 @@ const PROVIDER_PRESETS = {
   },
   anthropic: {
     label: 'Anthropic',
-    authType: AuthType.USE_OPENAI,
+    authType: AuthType.USE_ANTHROPIC,
     defaultBaseUrl: 'https://api.anthropic.com/v1',
     defaultEnvKey: 'ANTHROPIC_API_KEY',
   },
@@ -67,7 +67,7 @@ export async function runSetupWizard(): Promise<void> {
     const baseUrl = await promptBaseUrl(preset);
 
     // Step 3: API key
-    const apiKey = await promptApiKey(preset);
+    const { key: apiKey, fromEnv: apiKeyFromEnv } = await promptApiKey(preset);
 
     // Step 4: Discover models
     writeStdoutLine('\n⏳ Discovering models...\n');
@@ -81,7 +81,14 @@ export async function runSetupWizard(): Promise<void> {
         );
         const manualModelId = await promptText('Enter a model ID to use: ');
         if (manualModelId.trim()) {
-          await persistSetup(preset, baseUrl, apiKey, manualModelId.trim(), []);
+          await persistSetup(
+            preset,
+            baseUrl,
+            apiKey,
+            apiKeyFromEnv,
+            manualModelId.trim(),
+            [],
+          );
           return;
         }
         writeStderrLine('Setup cancelled — no model selected.\n');
@@ -108,6 +115,7 @@ export async function runSetupWizard(): Promise<void> {
       preset,
       baseUrl,
       apiKey,
+      apiKeyFromEnv,
       selectedModel.id,
       models,
       label,
@@ -188,9 +196,15 @@ async function promptBaseUrl(
   return url;
 }
 
+interface ApiKeyResult {
+  key: string;
+  /** True when the key came from an existing env var — don't persist to disk. */
+  fromEnv: boolean;
+}
+
 async function promptApiKey(
   preset: (typeof PROVIDER_PRESETS)[ProviderPresetKey],
-): Promise<string> {
+): Promise<ApiKeyResult> {
   // Check if already in env
   const envValue = process.env[preset.defaultEnvKey];
   if (envValue) {
@@ -200,7 +214,8 @@ async function promptApiKey(
     );
     const useExisting = await promptText('Use this key? (Y/n): ');
     if (!useExisting.trim() || useExisting.trim().toLowerCase() === 'y') {
-      return envValue;
+      // Key stays in env — don't write it back to disk
+      return { key: envValue, fromEnv: true };
     }
   }
 
@@ -211,7 +226,7 @@ async function promptApiKey(
       writeStderrLine('An API key is required.\n');
     }
   }
-  return key;
+  return { key, fromEnv: false };
 }
 
 async function selectModel(
@@ -318,8 +333,8 @@ interface SttConfig {
 function buildDefaultSttEndpoint(baseUrl: string): string {
   let normalised = baseUrl.replace(/\/+$/, '');
 
-  // Ensure /v1 is present
-  if (!normalised.match(/\/v\d+$/)) {
+  // Add /v1 only if no version segment exists (e.g. /v1, /v1beta, /v2alpha1)
+  if (!/\/v\d+[A-Za-z0-9._-]*(\/|$)/.test(normalised)) {
     normalised += '/v1';
   }
 
@@ -494,6 +509,7 @@ async function persistSetup(
   preset: (typeof PROVIDER_PRESETS)[ProviderPresetKey],
   baseUrl: string,
   apiKey: string,
+  apiKeyFromEnv: boolean,
   defaultModelId: string,
   discoveredModels: DiscoveredModel[],
   label?: string,
@@ -540,8 +556,12 @@ async function persistSetup(
   // Persist model providers
   settings.setValue(scope, `modelProviders.${preset.authType}`, merged);
 
-  // Persist API key in settings.env
-  settings.setValue(scope, `env.${envKey}`, apiKey);
+  // Only write the API key to disk if the user explicitly typed it.
+  // Keys already present in the environment stay there — no silent promotion
+  // of env-only secrets to plaintext on disk.
+  if (!apiKeyFromEnv) {
+    settings.setValue(scope, `env.${envKey}`, apiKey);
+  }
 
   // Set auth type
   settings.setValue(scope, 'security.auth.selectedType', preset.authType);

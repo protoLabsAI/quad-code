@@ -229,6 +229,40 @@ describe('fetchAvailableModels', () => {
     );
   });
 
+  it('should NOT append /v1 to URLs with a versioned path like /v1beta', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: 'gemini-pro' }] }),
+    });
+
+    await fetchAvailableModels(
+      'https://generativelanguage.googleapis.com/v1beta',
+      'api-key',
+    );
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/models',
+      expect.any(Object),
+    );
+  });
+
+  it('should NOT append /v1 to URLs with a /v1/ path segment', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: 'model-x' }] }),
+    });
+
+    await fetchAvailableModels(
+      'https://custom.example.com/v1/openai',
+      'api-key',
+    );
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'https://custom.example.com/v1/openai/models',
+      expect.any(Object),
+    );
+  });
+
   it('should handle models with optional fields missing', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,

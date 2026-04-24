@@ -86,16 +86,9 @@ function buildModelsUrl(baseUrl: string): string {
     return normalised;
   }
 
-  // If missing /v1 suffix and doesn't look like it has a versioned path, add /v1
-  if (
-    !normalised.match(/\/v\d+$/) &&
-    !normalised.endsWith('/api') &&
-    !normalised.endsWith('/openai')
-  ) {
-    // Don't add /v1 if the URL already includes a version path segment
-    if (!normalised.match(/\/v\d+\//)) {
-      normalised += '/v1';
-    }
+  // Add /v1 only if no version segment exists (e.g. /v1, /v1beta, /v2alpha1)
+  if (!/\/v\d+[A-Za-z0-9._-]*(\/|$)/.test(normalised)) {
+    normalised += '/v1';
   }
 
   return `${normalised}/models`;
