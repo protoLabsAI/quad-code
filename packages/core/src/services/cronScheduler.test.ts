@@ -242,7 +242,9 @@ describe('CronScheduler', () => {
     it('returns summary with single job', () => {
       scheduler.create('*/5 * * * *', 'check the build', true);
       const summary = scheduler.getExitSummary()!;
-      expect(summary).toContain('1 active loop cancelled:');
+      expect(summary).toContain(
+        '1 active loop saved (will resume next session):',
+      );
       expect(summary).toContain('Every 5 minutes');
       expect(summary).toContain('check the build');
     });
@@ -251,7 +253,9 @@ describe('CronScheduler', () => {
       scheduler.create('*/5 * * * *', 'check the build', true);
       scheduler.create('*/30 * * * *', 'check PR reviews', true);
       const summary = scheduler.getExitSummary()!;
-      expect(summary).toContain('2 active loops cancelled:');
+      expect(summary).toContain(
+        '2 active loops saved (will resume next session):',
+      );
       expect(summary).toContain('check the build');
       expect(summary).toContain('check PR reviews');
     });

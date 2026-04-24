@@ -23,12 +23,15 @@ const debugLogger = createDebugLogger('CLIENT');
 import type { ContentGenerator } from './contentGenerator.js';
 import { GeminiChat } from './geminiChat.js';
 import {
+  assemblePromptSections,
+  buildCapabilityManifest,
   getArenaSystemReminder,
   getCoreSystemPrompt,
   getCustomSystemPrompt,
   getPlanModeSystemReminder,
   getSubagentSystemReminder,
 } from './prompts.js';
+import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import {
   CompressionStatus,
   GeminiEventType,
@@ -280,39 +283,65 @@ export class GeminiClient {
     const userMemory = this.config.getUserMemory();
     const overrideSystemPrompt = this.config.getSystemPrompt();
     const appendSystemPrompt = this.config.getAppendSystemPrompt();
-
-    // Collect instructions from MCP servers that provided them in their
-    // initialize response. Append each block under a labelled header so the
-    // model can attribute guidance to the right server.
-    let mcpInstructions = '';
     const toolRegistry = this.config.getToolRegistry();
+
+    // --- workspace: MCP server instructions ---
+    let mcpInstructions = '';
     if (toolRegistry) {
       const serverInstructions = toolRegistry.getMcpServerInstructions();
       if (serverInstructions.size > 0) {
         const blocks = Array.from(serverInstructions.entries())
           .map(([name, text]) => `## MCP Server: ${name}\n\n${text}`)
           .join('\n\n');
-        mcpInstructions = `\n\n# MCP Server Instructions\n\n${blocks}`;
+        mcpInstructions = `# MCP Server Instructions\n\n${blocks}`;
       }
     }
 
-    if (overrideSystemPrompt) {
-      return (
-        getCustomSystemPrompt(
-          overrideSystemPrompt,
-          userMemory,
-          appendSystemPrompt,
-        ) + mcpInstructions
-      );
+    // --- workspace: capability manifest of session-specific MCP tools ---
+    let capabilityManifest = '';
+    if (toolRegistry && typeof toolRegistry.getAllTools === 'function') {
+      const mcpToolsByServer = new Map<string, string[]>();
+      for (const tool of toolRegistry.getAllTools()) {
+        if (tool instanceof DiscoveredMCPTool) {
+          const existing = mcpToolsByServer.get(tool.serverName) ?? [];
+          existing.push(tool.name);
+          mcpToolsByServer.set(tool.serverName, existing);
+        }
+      }
+      capabilityManifest = buildCapabilityManifest(mcpToolsByServer, []) ?? '';
     }
 
-    return (
-      getCoreSystemPrompt(
+    // --- run: per-turn permission blockers ---
+    const blockerNote =
+      this.config.getPermissionBlockerService?.()?.buildPromptNote() ?? '';
+
+    if (overrideSystemPrompt) {
+      const base = getCustomSystemPrompt(
+        overrideSystemPrompt,
         userMemory,
-        this.config.getModel(),
         appendSystemPrompt,
-      ).full + mcpInstructions
+      );
+      return assemblePromptSections([
+        { volatility: 'stable', content: base },
+        { volatility: 'workspace', content: mcpInstructions },
+        { volatility: 'workspace', content: capabilityManifest },
+        { volatility: 'run', content: blockerNote },
+      ]);
+    }
+
+    const corePrompt = getCoreSystemPrompt(
+      userMemory,
+      this.config.getModel(),
+      appendSystemPrompt,
     );
+
+    return assemblePromptSections([
+      { volatility: 'stable', content: corePrompt.staticPrefix },
+      { volatility: 'workspace', content: corePrompt.dynamicSuffix },
+      { volatility: 'workspace', content: mcpInstructions },
+      { volatility: 'workspace', content: capabilityManifest },
+      { volatility: 'run', content: blockerNote },
+    ]);
   }
 
   async startChat(extraHistory?: Content[]): Promise<GeminiChat> {

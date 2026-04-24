@@ -38,3 +38,10 @@ export {
   type ScannedMemory,
 } from './memoryScan.js';
 export { extractMemories } from './memoryExtractor.js';
+export {
+  getProposalsDir,
+  listProposals,
+  acceptProposal,
+  rejectProposal,
+  PROPOSALS_DIR_NAME,
+} from './proposalStore.js';

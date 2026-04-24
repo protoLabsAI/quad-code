@@ -17,11 +17,8 @@ import type {
   ToolConfig,
 } from '../agents/runtime/agent-types.js';
 import { ToolNames } from '../tools/tool-names.js';
-import {
-  getMemoryDir,
-  regenerateIndex,
-  scanMemoryHeaders,
-} from './memoryStore.js';
+import { getMemoryDir, scanMemoryHeaders } from './memoryStore.js';
+import { getProposalsDir } from './proposalStore.js';
 import { formatMemoryManifest } from './memoryScan.js';
 import type { MemoryScope } from './types.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
@@ -38,28 +35,28 @@ const MAX_EXTRACTOR_MINUTES = 1;
 function buildExtractionPrompt(
   newMessageCount: number,
   existingMemories: string,
-  memoryDir: string,
+  proposalsDir: string,
 ): string {
-  return `You are a memory extraction agent. Analyze the last ~${newMessageCount} messages and persist useful facts to ${memoryDir}.
+  return `You are a memory extraction agent. Analyze the last ~${newMessageCount} messages and write PROPOSALS for useful facts to ${proposalsDir}.
 
 ## Strict 2-Turn Budget
 - **Turn 1:** Issue ALL read_file and glob calls in parallel to gather existing memory state.
-- **Turn 2:** Issue ALL write_file calls in parallel to create/update memories. Then stop.
+- **Turn 2:** Issue ALL write_file calls in parallel to create proposal files. Then stop.
 Do NOT interleave reads and writes. Do NOT use more than 2 turns.
 
 ## What to Extract (from last ~${newMessageCount} messages ONLY)
 Do NOT investigate source code or verify facts. Only record what was discussed.
 
-Save when:
+Propose when:
 - User explicitly asks to remember something
 - User states a preference, role, or personal fact (type: user)
 - User corrects your approach or confirms a non-obvious method (type: feedback)
 - A deadline, decision, or project-specific fact is mentioned (type: project)
 - An external system or resource URL is referenced (type: reference)
 
-Do NOT save: code patterns derivable from reading code, git history, debugging solutions already in the repo, anything in PROTO.md/AGENTS.md, ephemeral task details.
+Do NOT propose: code patterns derivable from reading code, git history, debugging solutions already in the repo, anything in PROTO.md/AGENTS.md, ephemeral task details.
 
-## Memory File Format
+## Proposal File Format
 \`\`\`markdown
 ---
 name: short-kebab-name
@@ -70,12 +67,13 @@ type: user|feedback|project|reference
 The actual memory content here.
 \`\`\`
 
-Save as \`{type}_{name}.md\` in ${memoryDir}.
+Save as \`{type}_{name}.md\` in ${proposalsDir}.
+Note: These are PROPOSALS pending user approval. The user will review them with /memory proposals and accept or reject each one.
 
-## Existing Memories
+## Existing Memories (do not duplicate)
 ${existingMemories}
 
-Check before creating. Update existing if similar. If nothing worth saving, stop immediately.`;
+Check before creating. If nothing worth proposing, stop immediately.`;
 }
 
 /**
@@ -120,7 +118,7 @@ export async function extractMemories(
   scope: MemoryScope = 'project',
 ): Promise<void> {
   const cwd = config.getProjectRoot();
-  const memoryDir = getMemoryDir(scope, cwd);
+  const proposalsDir = getProposalsDir(scope, cwd);
 
   // Read cursor to determine how many new messages
   const cursor = await getCursor(scope, cwd);
@@ -133,6 +131,9 @@ export async function extractMemories(
     return;
   }
 
+  // Ensure proposals directory exists
+  await fs.mkdir(proposalsDir, { recursive: true });
+
   // Scan existing memories to include in the prompt
   const existingHeaders = await scanMemoryHeaders(scope, cwd);
   const manifest = formatMemoryManifest(existingHeaders);
@@ -140,7 +141,7 @@ export async function extractMemories(
   const systemPrompt = buildExtractionPrompt(
     newMessageCount,
     manifest,
-    memoryDir,
+    proposalsDir,
   );
 
   const promptConfig: PromptConfig = {
@@ -167,13 +168,13 @@ export async function extractMemories(
     );
 
     const context = new ContextState();
-    context.set('memoryDir', memoryDir);
+    context.set('proposalsDir', proposalsDir);
     context.set('newMessageCount', newMessageCount);
 
     await agent.execute(context);
 
-    // Regenerate the index after extraction
-    await regenerateIndex(scope, cwd);
+    // Do NOT regenerate the main index — proposals require user acceptance first.
+    // The index is updated when the user accepts proposals via /memory accept.
 
     // Advance cursor
     await setCursor(scope, messageCount, cwd);

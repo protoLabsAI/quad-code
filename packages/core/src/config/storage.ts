@@ -201,6 +201,18 @@ export class Storage {
     return path.join(targetDir, QWEN_DIR, 'memory');
   }
 
+  static getGlobalCronJobsPath(): string {
+    return path.join(Storage.getGlobalQwenDir(), 'cron-jobs.json');
+  }
+
+  getProjectCronJobsPath(): string {
+    return path.join(this.getQwenDir(), 'cron-jobs.json');
+  }
+
+  getProjectBlockersPath(): string {
+    return path.join(this.getQwenDir(), 'permission-blockers.json');
+  }
+
   static getGlobalTempDir(): string {
     return path.join(Storage.getRuntimeBaseDir(), TMP_DIR_NAME);
   }

@@ -1195,6 +1195,10 @@ export class CoreToolScheduler {
       const cancelMessage =
         payload?.cancelMessage || 'User did not allow tool call';
       this.setStatusInternal(callId, 'cancelled', cancelMessage);
+      // Record the denial so persistent blockers can warn the agent next session
+      this.config
+        .getPermissionBlockerService?.()
+        ?.recordDenial(toolCall.request.name);
     } else if (outcome === ToolConfirmationOutcome.ModifyWithEditor) {
       const waitingToolCall = toolCall as WaitingToolCall;
       if (isModifiableDeclarativeTool(waitingToolCall.tool)) {

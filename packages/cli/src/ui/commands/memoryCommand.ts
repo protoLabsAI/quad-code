@@ -13,6 +13,9 @@ import {
   deleteMemory,
   formatAge,
   getStaleWarning,
+  listProposals,
+  acceptProposal,
+  rejectProposal,
 } from '@qwen-code/qwen-code-core';
 import path from 'node:path';
 import os from 'node:os';
@@ -393,6 +396,173 @@ export const memoryCommand: SlashCommand = {
           {
             type: MessageType.INFO,
             text: t('No memory found matching "{{name}}".', { name }),
+          },
+          Date.now(),
+        );
+      },
+    },
+    {
+      name: 'proposals',
+      get description() {
+        return t(
+          'List pending memory proposals awaiting your approval. Accept with /memory accept <name>, reject with /memory reject <name>.',
+        );
+      },
+      kind: CommandKind.BUILT_IN,
+      action: async (context) => {
+        const cwd = context.services.config?.getWorkingDir?.() ?? process.cwd();
+        const projectProposals = await listProposals('project', cwd);
+        const globalProposals = await listProposals('global');
+        const all = [
+          ...projectProposals.map((m) => ({ ...m, scope: 'project' as const })),
+          ...globalProposals.map((m) => ({ ...m, scope: 'global' as const })),
+        ];
+
+        if (all.length === 0) {
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: t(
+                'No pending memory proposals. Proposals appear here after the memory extractor runs.',
+              ),
+            },
+            Date.now(),
+          );
+          return;
+        }
+
+        const lines = all.map((m) => {
+          const age = formatAge(m.mtimeMs);
+          const id = path.basename(m.filePath, '.md');
+          const preview = m.content.slice(0, 120).replace(/\n/g, ' ').trim();
+          return `  [${m.header.type}] ${m.header.name} (${m.scope}, ${age})\n    ${m.header.description}\n    Preview: ${preview}…\n    ID: ${id}`;
+        });
+
+        context.ui.addItem(
+          {
+            type: MessageType.INFO,
+            text: `${all.length} pending proposal${all.length === 1 ? '' : 's'}:\n\n${lines.join('\n\n')}\n\nUse /memory accept <id> or /memory reject <id>`,
+          },
+          Date.now(),
+        );
+      },
+    },
+    {
+      name: 'accept',
+      get description() {
+        return t('Accept a memory proposal by ID. Usage: /memory accept <id>');
+      },
+      kind: CommandKind.BUILT_IN,
+      action: async (
+        context,
+        args,
+      ): Promise<void | SlashCommandActionReturn> => {
+        const id = args?.trim();
+        if (!id) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: t(
+              'Usage: /memory accept <id>  (see /memory proposals for IDs)',
+            ),
+          };
+        }
+
+        const cwd = context.services.config?.getWorkingDir?.() ?? process.cwd();
+
+        for (const scope of ['project', 'global'] as const) {
+          const proposals = await listProposals(scope, cwd);
+          const match = proposals.find(
+            (p) =>
+              path.basename(p.filePath, '.md') === id ||
+              p.header.name.toLowerCase() === id.toLowerCase(),
+          );
+          if (match) {
+            const dest = await acceptProposal(match.filePath, scope, cwd);
+            if (dest) {
+              context.ui.addItem(
+                {
+                  type: MessageType.INFO,
+                  text: t('Accepted memory: {{name}} ({{scope}})', {
+                    name: match.header.name,
+                    scope,
+                  }),
+                },
+                Date.now(),
+              );
+              return;
+            }
+          }
+        }
+
+        context.ui.addItem(
+          {
+            type: MessageType.INFO,
+            text: t(
+              'No proposal found with ID "{{id}}". Run /memory proposals to see pending IDs.',
+              { id },
+            ),
+          },
+          Date.now(),
+        );
+      },
+    },
+    {
+      name: 'reject',
+      get description() {
+        return t(
+          'Reject (discard) a memory proposal by ID. Usage: /memory reject <id>',
+        );
+      },
+      kind: CommandKind.BUILT_IN,
+      action: async (
+        context,
+        args,
+      ): Promise<void | SlashCommandActionReturn> => {
+        const id = args?.trim();
+        if (!id) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: t(
+              'Usage: /memory reject <id>  (see /memory proposals for IDs)',
+            ),
+          };
+        }
+
+        const cwd = context.services.config?.getWorkingDir?.() ?? process.cwd();
+
+        for (const scope of ['project', 'global'] as const) {
+          const proposals = await listProposals(scope, cwd);
+          const match = proposals.find(
+            (p) =>
+              path.basename(p.filePath, '.md') === id ||
+              p.header.name.toLowerCase() === id.toLowerCase(),
+          );
+          if (match) {
+            const deleted = await rejectProposal(match.filePath);
+            if (deleted) {
+              context.ui.addItem(
+                {
+                  type: MessageType.INFO,
+                  text: t('Rejected proposal: {{name}}', {
+                    name: match.header.name,
+                  }),
+                },
+                Date.now(),
+              );
+              return;
+            }
+          }
+        }
+
+        context.ui.addItem(
+          {
+            type: MessageType.INFO,
+            text: t(
+              'No proposal found with ID "{{id}}". Run /memory proposals to see pending IDs.',
+              { id },
+            ),
           },
           Date.now(),
         );

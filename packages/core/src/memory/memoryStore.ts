@@ -23,6 +23,7 @@ import {
   FRONTMATTER_MAX_LINES,
 } from './types.js';
 import { createDebugLogger } from '../utils/debugLogger.js';
+import { getStaleWarning } from './memoryAge.js';
 
 const logger = createDebugLogger('MEMORY_STORE');
 
@@ -272,7 +273,9 @@ export async function regenerateIndex(
 
   for (const mem of memories) {
     const filename = path.basename(mem.filePath);
-    const line = `- [${mem.header.name}](${filename}) — ${mem.header.description}`;
+    const staleWarning = getStaleWarning(mem.mtimeMs, mem.header.type);
+    const stalenessTag = staleWarning ? ` ${staleWarning}` : '';
+    const line = `- [${mem.header.name}](${filename}) — ${mem.header.description}${stalenessTag}`;
     lines.push(line);
   }
 

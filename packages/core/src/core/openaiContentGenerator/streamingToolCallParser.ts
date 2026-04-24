@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { safeJsonParse } from '../../utils/safeJsonParse.js';
+import { jsonrepair } from 'jsonrepair';
+import { createDebugLogger } from '../../utils/debugLogger.js';
+
+const debugLogger = createDebugLogger('STREAMING_TOOL_CALL_PARSER');
 
 /**
  * Type definition for the result of parsing a JSON chunk in tool calls
@@ -238,47 +241,77 @@ export class StreamingToolCallParser {
     name?: string;
     args: Record<string, unknown>;
     index: number;
+    malformed?: boolean;
   }> {
     const completed: Array<{
       id?: string;
       name?: string;
       args: Record<string, unknown>;
       index: number;
+      malformed?: boolean;
     }> = [];
 
     for (const [index, buffer] of this.buffers.entries()) {
       const meta = this.toolCallMeta.get(index);
       if (meta?.name && buffer.trim()) {
-        let args: Record<string, unknown> = {};
-
-        // Try to parse the final buffer
-        try {
-          args = JSON.parse(buffer);
-        } catch {
-          // Try with repair (auto-close strings)
-          const inString = this.inStrings.get(index);
-          if (inString) {
-            try {
-              args = JSON.parse(buffer + '"');
-            } catch {
-              // If all parsing fails, use safeJsonParse as fallback
-              args = safeJsonParse(buffer, {});
-            }
-          } else {
-            args = safeJsonParse(buffer, {});
-          }
-        }
-
+        const { args, malformed } = this.parseArgsBuffer(index, buffer);
         completed.push({
           id: meta.id,
           name: meta.name,
           args,
           index,
+          ...(malformed ? { malformed: true } : {}),
         });
       }
     }
 
     return completed;
+  }
+
+  /**
+   * Parse an accumulated arguments buffer with escalating recovery strategies.
+   * Returns `malformed: true` when every strategy fails — callers should treat
+   * these as poison and drop the tool call rather than emit it with empty args,
+   * which would otherwise corrupt conversation history (the upstream `vLLM +
+   * broken Qwen chat template` failure mode that interleaves content into
+   * `tool_calls.function.arguments`).
+   */
+  private parseArgsBuffer(
+    index: number,
+    buffer: string,
+  ): { args: Record<string, unknown>; malformed: boolean } {
+    try {
+      return { args: JSON.parse(buffer), malformed: false };
+    } catch {
+      // fall through
+    }
+
+    if (this.inStrings.get(index)) {
+      try {
+        return { args: JSON.parse(buffer + '"'), malformed: false };
+      } catch {
+        // fall through
+      }
+    }
+
+    try {
+      const parsed = JSON.parse(jsonrepair(buffer));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return { args: parsed as Record<string, unknown>, malformed: false };
+      }
+    } catch {
+      // fall through
+    }
+
+    debugLogger.error(
+      'Failed to parse tool_call arguments; marking malformed',
+      {
+        index,
+        bufferPreview: buffer.slice(0, 200),
+        bufferLength: buffer.length,
+      },
+    );
+    return { args: {}, malformed: true };
   }
 
   /**

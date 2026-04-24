@@ -1,8 +1,10 @@
 /**
- * In-session cron scheduler. Jobs live in memory and are gone when the
- * process exits. Ticks every second, fires callbacks when jobs are due.
+ * Cron scheduler with optional disk persistence. When a persistPath is
+ * provided, jobs survive process restarts; expired jobs are pruned on load.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { matches, nextFireTime } from '../utils/cronParser.js';
 import { humanReadableCron } from '../utils/cronDisplay.js';
 
@@ -92,6 +94,44 @@ export class CronScheduler {
   private jobs = new Map<string, CronJob>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private onFire: ((job: CronJob) => void) | null = null;
+  private readonly persistPath: string | null;
+
+  constructor(persistPath?: string) {
+    this.persistPath = persistPath ?? null;
+    if (this.persistPath) {
+      this.loadFromDisk();
+    }
+  }
+
+  private loadFromDisk(): void {
+    if (!this.persistPath) return;
+    try {
+      const raw = fs.readFileSync(this.persistPath, 'utf-8');
+      const jobs = JSON.parse(raw) as CronJob[];
+      const now = Date.now();
+      for (const job of jobs) {
+        if (now < job.expiresAt) {
+          this.jobs.set(job.id, job);
+        }
+      }
+    } catch {
+      // File doesn't exist or is corrupt — start with empty store
+    }
+  }
+
+  private saveToDisk(): void {
+    if (!this.persistPath) return;
+    try {
+      fs.mkdirSync(path.dirname(this.persistPath), { recursive: true });
+      fs.writeFileSync(
+        this.persistPath,
+        JSON.stringify([...this.jobs.values()], null, 2),
+        'utf-8',
+      );
+    } catch {
+      // Non-fatal — session continues without persistence
+    }
+  }
 
   /**
    * Creates a new cron job. Returns the created job.
@@ -119,6 +159,7 @@ export class CronScheduler {
     };
 
     this.jobs.set(id, job);
+    this.saveToDisk();
     return job;
   }
 
@@ -126,7 +167,9 @@ export class CronScheduler {
    * Deletes a job by ID. Returns true if the job existed.
    */
   delete(id: string): boolean {
-    return this.jobs.delete(id);
+    const existed = this.jobs.delete(id);
+    if (existed) this.saveToDisk();
+    return existed;
   }
 
   /**
@@ -245,6 +288,8 @@ export class CronScheduler {
         this.jobs.delete(job.id);
       }
 
+      this.saveToDisk();
+
       if (this.onFire) {
         this.onFire(job);
       }
@@ -260,7 +305,7 @@ export class CronScheduler {
 
     const count = this.jobs.size;
     const lines = [
-      `Session ending. ${count} active loop${count === 1 ? '' : 's'} cancelled:`,
+      `Session ending. ${count} active loop${count === 1 ? '' : 's'} saved (will resume next session):`,
     ];
     for (const job of this.jobs.values()) {
       const schedule = humanReadableCron(job.cronExpr);

@@ -150,7 +150,7 @@ export class MemoryConsolidationService {
 
       // Phase 1: Prune stale entries (>90 days)
       const staleFiles = memories.filter((m) =>
-        isStale(m.mtimeMs, STALE_THRESHOLD_DAYS),
+        isStale(m.mtimeMs, undefined, STALE_THRESHOLD_DAYS),
       );
       for (const stale of staleFiles) {
         await deleteMemory(stale.filePath, scope, this.projectDir);
@@ -159,7 +159,7 @@ export class MemoryConsolidationService {
       }
 
       const remaining = memories.filter(
-        (m) => !isStale(m.mtimeMs, STALE_THRESHOLD_DAYS),
+        (m) => !isStale(m.mtimeMs, undefined, STALE_THRESHOLD_DAYS),
       );
 
       if (remaining.length < 2) {
