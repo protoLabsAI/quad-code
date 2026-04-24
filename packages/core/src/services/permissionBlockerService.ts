@@ -56,7 +56,7 @@ export class PermissionBlockerService {
 
   /**
    * Record a user-initiated denial for the given tool.
-   * Once the denial count reaches the threshold the entry is persisted.
+   * Every denial is persisted so counts are never lost across restarts.
    */
   recordDenial(toolName: string): void {
     const existing = this.denials.get(toolName) ?? { count: 0, lastSeenAt: 0 };
@@ -65,9 +65,7 @@ export class PermissionBlockerService {
       lastSeenAt: Date.now(),
     };
     this.denials.set(toolName, updated);
-    if (updated.count >= DENY_THRESHOLD) {
-      this.saveToDisk();
-    }
+    this.saveToDisk();
   }
 
   /**

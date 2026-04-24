@@ -34,7 +34,9 @@ const EVOLVE_DIR_NAME = 'evolve';
 
 export const EVOLVE_SKILLS_DIR = path.join(QWEN_DIR, EVOLVE_DIR_NAME, 'skills');
 
-let turnsSinceLastReview = 0;
+// Per-project turn counters — keyed by project root path so concurrent
+// sessions in different directories don't interfere with each other.
+const turnCounters = new Map<string, number>();
 
 /**
  * Call after each agent turn completes. Runs skill candidate detection every
@@ -44,9 +46,14 @@ export async function runEvolvePass(
   config: Config,
   recentMessages: Array<{ role: string; text: string }>,
 ): Promise<void> {
-  turnsSinceLastReview++;
-  if (turnsSinceLastReview < SKILL_REVIEW_INTERVAL) return;
-  turnsSinceLastReview = 0;
+  const key = config.getProjectRoot();
+  const prev = turnCounters.get(key) ?? 0;
+  const next = prev + 1;
+  if (next < SKILL_REVIEW_INTERVAL) {
+    turnCounters.set(key, next);
+    return;
+  }
+  turnCounters.set(key, 0);
 
   if (recentMessages.length < 4) return;
 

@@ -75,20 +75,50 @@ export async function listProposals(
 }
 
 /**
+ * Returns true if `filePath` is contained within `dir` (no path traversal).
+ */
+function isInsideDir(dir: string, filePath: string): boolean {
+  const rel = path.relative(dir, filePath);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+/**
  * Accept a proposal by moving it from proposals/ to the memory directory.
- * Returns the path of the accepted file, or null if the source does not exist.
+ * Returns the path of the accepted file, or null if the source does not exist
+ * or if the path is outside the proposals directory.
  */
 export async function acceptProposal(
   proposalFilePath: string,
   scope: MemoryScope,
   cwd?: string,
 ): Promise<string | null> {
+  const proposalsDir = getProposalsDir(scope, cwd);
+  const resolvedProposal = path.resolve(proposalFilePath);
+  const resolvedProposalsDir = path.resolve(proposalsDir);
+
+  if (!isInsideDir(resolvedProposalsDir, resolvedProposal)) {
+    return null;
+  }
+
   const memoryDir = getMemoryDir(scope, cwd);
-  const destPath = path.join(memoryDir, path.basename(proposalFilePath));
+  const basename = path.basename(resolvedProposal);
+  let destPath = path.join(memoryDir, basename);
+
+  // Avoid silently overwriting an existing memory file
+  if (
+    await fs
+      .access(destPath)
+      .then(() => true)
+      .catch(() => false)
+  ) {
+    const ext = path.extname(basename);
+    const stem = path.basename(basename, ext);
+    destPath = path.join(memoryDir, `${stem}-${Date.now()}${ext}`);
+  }
 
   try {
     await fs.mkdir(memoryDir, { recursive: true });
-    await fs.rename(proposalFilePath, destPath);
+    await fs.rename(resolvedProposal, destPath);
     await regenerateIndex(scope, cwd);
     return destPath;
   } catch {
@@ -98,12 +128,23 @@ export async function acceptProposal(
 
 /**
  * Reject (delete) a proposal file.
+ * Returns false if the path is outside the proposals directory.
  */
 export async function rejectProposal(
   proposalFilePath: string,
+  scope: MemoryScope,
+  cwd?: string,
 ): Promise<boolean> {
+  const proposalsDir = getProposalsDir(scope, cwd);
+  const resolvedProposal = path.resolve(proposalFilePath);
+  const resolvedProposalsDir = path.resolve(proposalsDir);
+
+  if (!isInsideDir(resolvedProposalsDir, resolvedProposal)) {
+    return false;
+  }
+
   try {
-    await fs.unlink(proposalFilePath);
+    await fs.unlink(resolvedProposal);
     return true;
   } catch {
     return false;

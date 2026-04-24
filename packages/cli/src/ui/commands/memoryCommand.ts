@@ -540,7 +540,7 @@ export const memoryCommand: SlashCommand = {
               p.header.name.toLowerCase() === id.toLowerCase(),
           );
           if (match) {
-            const deleted = await rejectProposal(match.filePath);
+            const deleted = await rejectProposal(match.filePath, scope, cwd);
             if (deleted) {
               context.ui.addItem(
                 {
