@@ -110,6 +110,10 @@ export class CronScheduler {
       const jobs = JSON.parse(raw) as CronJob[];
       const now = Date.now();
       for (const job of jobs) {
+        // JSON.stringify serialises Infinity as null — restore it for one-shot jobs.
+        if (job.expiresAt === null || job.expiresAt === undefined) {
+          job.expiresAt = Infinity;
+        }
         if (now < job.expiresAt) {
           this.jobs.set(job.id, job);
         }
@@ -318,10 +322,12 @@ export class CronScheduler {
   }
 
   /**
-   * Clears all jobs and stops the scheduler.
+   * Clears all jobs and stops the scheduler. Persists the empty state so
+   * cleared jobs do not reappear on next session load.
    */
   destroy(): void {
     this.stop();
     this.jobs.clear();
+    this.saveToDisk();
   }
 }
