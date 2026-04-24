@@ -1151,17 +1151,29 @@ export class OpenAIContentConverter {
           this.streamingToolCallParser.getCompletedToolCalls();
 
         for (const toolCall of completedToolCalls) {
-          if (toolCall.name) {
+          if (!toolCall.name) continue;
+
+          // Drop malformed tool calls — emitting them with empty args would
+          // both fail the actual tool invocation and poison the conversation
+          // history, causing downstream provider (LiteLLM/Pydantic) failures
+          // on subsequent turns. Surface a visible text note so the model
+          // can recover instead of silently stalling.
+          if (toolCall.malformed) {
             parts.push({
-              functionCall: {
-                id:
-                  toolCall.id ||
-                  `call_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                name: toolCall.name,
-                args: toolCall.args,
-              },
+              text: `[tool_call dropped: upstream streamed malformed JSON arguments for \`${toolCall.name}\`. Retry the call with properly-formed arguments.]`,
             });
+            continue;
           }
+
+          parts.push({
+            functionCall: {
+              id:
+                toolCall.id ||
+                `call_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+              name: toolCall.name,
+              args: toolCall.args,
+            },
+          });
         }
 
         // Clear the parser for the next stream

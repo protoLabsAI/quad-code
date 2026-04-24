@@ -47,6 +47,7 @@ import { themeCommand } from '../ui/commands/themeCommand.js';
 import { toolsCommand } from '../ui/commands/toolsCommand.js';
 import { vimCommand } from '../ui/commands/vimCommand.js';
 import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
+import { setupCommand } from '../ui/commands/setupCommand.js';
 import { insightCommand } from '../ui/commands/insightCommand.js';
 import { teamCommand } from '../ui/commands/teamCommand.js';
 import { voiceCommand } from '../ui/commands/voiceCommand.js';
@@ -105,6 +106,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       toolsCommand,
       settingsCommand,
       vimCommand,
+      setupCommand,
       setupGithubCommand,
       teamCommand,
       terminalSetupCommand,

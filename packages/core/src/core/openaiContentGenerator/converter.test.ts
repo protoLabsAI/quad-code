@@ -1138,6 +1138,50 @@ describe('OpenAIContentConverter', () => {
       const parts = chunk.candidates?.[0]?.content?.parts;
       expect(parts).toEqual([]);
     });
+
+    it('should drop malformed streaming tool_calls and emit a recovery text part', () => {
+      // Reproduces the upstream vLLM-with-broken-chat-template failure mode
+      // where tool_call.function.arguments chunks contain prose interleaved
+      // with partial JSON. Emitting such a tool call would corrupt the
+      // conversation history (downstream provider Pydantic validator fails)
+      // and the tool would be invoked with empty args.
+      const chunk = converter.convertOpenAIChunkToGemini({
+        object: 'chat.completion.chunk',
+        id: 'chunk-malformed',
+        created: 789,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_bad',
+                  type: 'function',
+                  function: {
+                    name: 'Read',
+                    arguments:
+                      'Current state — research in progress{"file_path": and more prose without closure',
+                  },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+            logprobs: null,
+          },
+        ],
+        model: 'qwen-test',
+      } as unknown as OpenAI.Chat.ChatCompletionChunk);
+
+      const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+      expect(parts.some((p) => 'functionCall' in p)).toBe(false);
+      const textPart = parts.find(
+        (p) => 'text' in p && typeof p.text === 'string',
+      ) as { text: string } | undefined;
+      expect(textPart).toBeDefined();
+      expect(textPart!.text).toMatch(/tool_call dropped/);
+      expect(textPart!.text).toContain('Read');
+    });
   });
 
   describe('inline <think> tag parsing (Minimax / QwQ style)', () => {

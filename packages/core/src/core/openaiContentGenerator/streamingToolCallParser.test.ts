@@ -382,6 +382,25 @@ describe('StreamingToolCallParser', () => {
       expect(completed).toHaveLength(1);
       // jsonrepair should fix the malformed JSON by setting invalid to null
       expect(completed[0].args).toEqual({ valid: 'data', invalid: null });
+      expect(completed[0].malformed).toBeUndefined();
+    });
+
+    it('should flag unrecoverable tool call arguments as malformed', () => {
+      // Reproduces the upstream "interleaved content + arguments" failure
+      // mode (vLLM serving Qwen with a broken chat template): the accumulated
+      // buffer contains prose mixed with partial JSON, which neither JSON.parse
+      // nor jsonrepair can resolve into an object.
+      parser.addChunk(
+        0,
+        'Current state — research in progress{"file_path": and more prose without closure',
+        'call_1',
+        'Read',
+      );
+
+      const completed = parser.getCompletedToolCalls();
+      expect(completed).toHaveLength(1);
+      expect(completed[0].malformed).toBe(true);
+      expect(completed[0].args).toEqual({});
     });
 
     it('should not return tool calls without function name', () => {
