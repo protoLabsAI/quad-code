@@ -36,6 +36,7 @@ import { hooksCommand } from '../commands/hooks.js';
 import type { Settings } from './settings.js';
 import { loadSettings, SettingScope } from './settings.js';
 import { authCommand } from '../commands/auth.js';
+import { setupCommand } from '../commands/setup.js';
 import {
   resolveCliGenerationConfig,
   getAuthTypeFromEnv,
@@ -587,6 +588,8 @@ export async function parseArguments(): Promise<CliArgs> {
     .command(extensionsCommand)
     // Register Auth subcommands
     .command(authCommand)
+    // Register Setup subcommand
+    .command(setupCommand)
     // Register Hooks subcommands
     .command(hooksCommand);
 
