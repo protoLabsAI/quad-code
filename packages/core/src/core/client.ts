@@ -656,6 +656,10 @@ export class GeminiClient {
       this.config.getChatRecordingService()?.recordUserMessage(request);
 
       // strip thoughts from history before sending the message
+      // NOTE: backport of upstream #3590 changed sessionService default to
+      // KEEP thoughts (preserves reasoning_content for DeepSeek/reasoning
+      // models on resume). The mid-stream stripThoughtsFromHistory() here
+      // remains for active turns to avoid stale thoughts polluting cache.
       this.stripThoughtsFromHistory();
 
       // Capture history length for rewind support.
