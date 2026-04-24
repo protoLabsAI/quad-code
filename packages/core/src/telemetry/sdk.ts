@@ -126,7 +126,11 @@ export function initializeTelemetry(config: Config): void {
   const otlpProtocol = config.getTelemetryOtlpProtocol();
   const parsedEndpoint = parseOtlpEndpoint(otlpEndpoint, otlpProtocol);
   const telemetryOutfile = config.getTelemetryOutfile();
-  const useOtlp = !!parsedEndpoint && !telemetryOutfile;
+  // OTLP export requires telemetry.enabled — the endpoint alone defaults to
+  // localhost:4317, so without this gate a Langfuse-only user would still
+  // get a gRPC exporter aimed at localhost spamming ECONNREFUSED.
+  const useOtlp =
+    config.getTelemetryEnabled() && !!parsedEndpoint && !telemetryOutfile;
 
   // No destination configured — skip SDK init to avoid flooding the console.
   if (!useOtlp && !telemetryOutfile && !langfuse) {

@@ -282,5 +282,23 @@ describe('Telemetry SDK', () => {
       // Should still start the SDK because Langfuse processor is non-null
       expect(NodeSDK.prototype.start).toHaveBeenCalled();
     });
+
+    it('does not create the default gRPC OTLP exporter when only Langfuse is configured', () => {
+      process.env['LANGFUSE_PUBLIC_KEY'] = 'pk-lf-test';
+      process.env['LANGFUSE_SECRET_KEY'] = 'sk-lf-test';
+      vi.spyOn(mockConfig, 'getTelemetryEnabled').mockReturnValue(false);
+
+      initializeTelemetry(mockConfig);
+
+      // The default endpoint is localhost:4317 but with telemetry disabled,
+      // no gRPC exporter should be instantiated (only the Langfuse HTTP one).
+      expect(OTLPTraceExporter).not.toHaveBeenCalled();
+      expect(OTLPLogExporter).not.toHaveBeenCalled();
+      expect(OTLPMetricExporter).not.toHaveBeenCalled();
+
+      const sdkCalls = vi.mocked(NodeSDK).mock.calls;
+      const spanProcessors = sdkCalls[0][0]?.spanProcessors;
+      expect(spanProcessors).toHaveLength(1);
+    });
   });
 });
