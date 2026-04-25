@@ -1,6 +1,6 @@
 ---
 name: coding-agent-standards
-description: Implementation quality checklist for coding agents - ensures code changes meet production standards before completion
+description: Implementation quality checklist — invoke only when explicitly asked to run a standards check or quality gate review
 agentOnly: true
 ---
 
