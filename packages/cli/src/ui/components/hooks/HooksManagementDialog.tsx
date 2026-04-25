@@ -300,15 +300,16 @@ export function HooksManagementDialog({
     return result;
   }, [config]);
 
-  // Load hooks data on initial render
+  // Load hooks data on initial render. fetchHooksData is synchronous so we
+  // resolve loading in the same microtask — no intermediate spinner flash.
   useEffect(() => {
     let cancelled = false;
-    setIsLoading(true);
     setLoadError(null);
     try {
       const hooksData = fetchHooksData();
       if (!cancelled) {
         setHooks(hooksData);
+        setIsLoading(false);
       }
     } catch (error) {
       if (!cancelled) {
@@ -316,9 +317,6 @@ export function HooksManagementDialog({
         setLoadError(
           error instanceof Error ? error.message : 'Failed to load hooks',
         );
-      }
-    } finally {
-      if (!cancelled) {
         setIsLoading(false);
       }
     }
