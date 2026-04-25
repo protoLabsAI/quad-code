@@ -94,6 +94,14 @@ export const StatusBar = ({
         ⟡
       </Text>
 
+      <Sep />
+
+      {/* Hostname */}
+      <Badge dim>
+        <Text>⬡ </Text>
+        <Text>{os.hostname()}</Text>
+      </Badge>
+
       {/* Background agent activity indicators */}
       {activeAgents.map((agent) => {
         const label =
