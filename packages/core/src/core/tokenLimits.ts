@@ -9,7 +9,7 @@ type TokenCount = number;
 export type TokenLimitType = 'input' | 'output';
 
 export const DEFAULT_TOKEN_LIMIT: TokenCount = 131_072; // 128K (power-of-two)
-export const DEFAULT_OUTPUT_TOKEN_LIMIT: TokenCount = 32_000; // 32K tokens
+export const DEFAULT_OUTPUT_TOKEN_LIMIT: TokenCount = 16_000; // 16K tokens — conservative default to preserve context window headroom
 
 /**
  * Accurate numeric limits:
