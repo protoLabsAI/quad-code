@@ -10,7 +10,7 @@ import os from 'node:os';
 import { StatusBar } from './StatusBar.js';
 
 vi.mock('../hooks/useGitBranchName.js', () => ({
-  useGitBranchName: vi.fn(() => null),
+  useGitBranchName: vi.fn(() => undefined),
 }));
 
 vi.mock('../hooks/useGitDiffStat.js', () => ({
@@ -18,7 +18,10 @@ vi.mock('../hooks/useGitDiffStat.js', () => ({
 }));
 
 vi.mock('../hooks/useBackgroundAgentProgress.js', () => ({
-  useBackgroundAgentProgress: vi.fn(() => ({ activeAgents: [] })),
+  useBackgroundAgentProgress: vi.fn(() => ({
+    activeAgents: [],
+    lastFinished: null,
+  })),
 }));
 
 import { useGitBranchName } from '../hooks/useGitBranchName.js';
@@ -34,9 +37,9 @@ const render$ = (props: Partial<React.ComponentProps<typeof StatusBar>> = {}) =>
 
 describe('<StatusBar />', () => {
   beforeEach(() => {
-    mockBranch.mockReturnValue(null);
+    mockBranch.mockReturnValue(undefined);
     mockDiff.mockReturnValue(null);
-    mockAgents.mockReturnValue({ activeAgents: [] });
+    mockAgents.mockReturnValue({ activeAgents: [], lastFinished: null });
   });
 
   it('renders the ⟡ logo mark', () => {
@@ -73,7 +76,7 @@ describe('<StatusBar />', () => {
   });
 
   it('hides git branch section when no branch', () => {
-    mockBranch.mockReturnValue(null);
+    mockBranch.mockReturnValue(undefined);
     const { lastFrame } = render$();
     expect(lastFrame()).not.toContain('⎇');
   });
@@ -108,8 +111,10 @@ describe('<StatusBar />', () => {
           agentName: 'test-agent',
           round: 2,
           toolName: undefined,
+          startedAt: Date.now(),
         },
       ],
+      lastFinished: null,
     });
     const { lastFrame } = render$();
     expect(lastFrame()).toContain('⟳ test-agent: turn 2');
