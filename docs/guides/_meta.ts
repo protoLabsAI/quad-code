@@ -1,5 +1,7 @@
 export default {
   index: 'Overview',
+  // --- Setup ---
+  'setup-wizard': 'Run the Setup Wizard',
   // --- Models & Auth ---
   'configure-models': 'Configure Models & Auth',
   // --- Core agentic features ---
@@ -28,4 +30,5 @@ export default {
   // --- Customisation ---
   themes: 'Themes',
   language: 'Language (i18n)',
+  'voice-input': 'Voice Input (Push-to-Talk)',
 };

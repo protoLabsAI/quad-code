@@ -134,6 +134,16 @@ Map of MCP server configurations. See [Guides → Connect via MCP](../guides/use
 | `arena.maxRoundsPerAgent` | number | `50`             | Max reasoning rounds per agent     |
 | `arena.timeoutSeconds`    | number | `600`            | Timeout per agent                  |
 
+### `voice`
+
+| Setting             | Type    | Default                                         | Description                                                                                                          |
+| ------------------- | ------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `voice.enabled`     | boolean | `false`                                         | Enable push-to-talk voice input (Ctrl+Space)                                                                         |
+| `voice.sttEndpoint` | string  | `http://localhost:8000/v1/audio/transcriptions` | OpenAI-compatible STT endpoint URL                                                                                   |
+| `voice.sttEnvKey`   | string  | —                                               | Name of an environment variable whose value is used as `Authorization: Bearer <value>` when calling the STT endpoint |
+
+See [Guides → Voice Input](../guides/voice-input) for setup instructions and prerequisites.
+
 ### `experimental`
 
 | Setting             | Type    | Default | Description            |

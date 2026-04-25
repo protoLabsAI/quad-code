@@ -17,14 +17,16 @@ Commands in proto fall into three categories based on their prefix.
 
 ### Interface
 
-| Command      | Description                         |
-| ------------ | ----------------------------------- |
-| `/clear`     | Clear terminal screen (`Ctrl+L`)    |
-| `/context`   | Show context window usage breakdown |
-| `/theme`     | Change visual theme                 |
-| `/vim`       | Toggle Vim editing mode             |
-| `/directory` | Manage multi-directory workspace    |
-| `/editor`    | Select preferred editor             |
+| Command         | Description                                                         |
+| --------------- | ------------------------------------------------------------------- |
+| `/clear`        | Clear terminal screen (`Ctrl+L`)                                    |
+| `/context`      | Show context window usage breakdown                                 |
+| `/theme`        | Change visual theme                                                 |
+| `/vim`          | Toggle Vim editing mode                                             |
+| `/directory`    | Manage multi-directory workspace                                    |
+| `/editor`       | Select preferred editor                                             |
+| `/voice`        | Toggle push-to-talk voice input on or off (persisted to settings)   |
+| `/voice status` | Show voice input status: enabled state, STT endpoint, audio backend |
 
 ### Language
 
@@ -54,17 +56,18 @@ Commands in proto fall into three categories based on their prefix.
 
 ### Information & settings
 
-| Command              | Description                                            |
-| -------------------- | ------------------------------------------------------ |
-| `/help` or `/?`      | Display help                                           |
-| `/about`             | Display version information                            |
-| `/stats`             | Show session statistics (tokens, costs, cached tokens) |
-| `/settings`          | Open settings editor                                   |
-| `/auth`              | Change authentication method                           |
-| `/permissions`       | Manage folder trust                                    |
-| `/bug <description>` | Submit a bug report                                    |
-| `/copy`              | Copy last output to clipboard                          |
-| `/quit` or `/exit`   | Exit proto                                             |
+| Command              | Description                                                      |
+| -------------------- | ---------------------------------------------------------------- |
+| `/help` or `/?`      | Display help                                                     |
+| `/about`             | Display version information                                      |
+| `/stats`             | Show session statistics (tokens, costs, cached tokens)           |
+| `/settings`          | Open settings editor                                             |
+| `/setup`             | Reminder to run `proto setup` (wizard requires a fresh terminal) |
+| `/auth`              | Change authentication method                                     |
+| `/permissions`       | Manage folder trust                                              |
+| `/bug <description>` | Submit a bug report                                              |
+| `/copy`              | Copy last output to clipboard                                    |
+| `/quit` or `/exit`   | Exit proto                                                       |
 
 ### Auth CLI subcommands (terminal, outside session)
 
@@ -72,6 +75,14 @@ Commands in proto fall into three categories based on their prefix.
 | ------------------- | ------------------------ |
 | `proto auth`        | Interactive auth setup   |
 | `proto auth status` | Show current auth status |
+
+### Setup CLI subcommand (terminal, outside session)
+
+| Command       | Description                                                             |
+| ------------- | ----------------------------------------------------------------------- |
+| `proto setup` | Interactive wizard — configure a model provider, API key, default model |
+
+See [Guides → Run the Setup Wizard](../guides/setup-wizard) for a full walkthrough.
 
 ## `@` commands — inject files
 
