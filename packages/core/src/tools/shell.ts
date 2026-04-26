@@ -43,6 +43,13 @@ import {
   isShellCommandReadOnlyAST,
   extractCommandRules,
 } from '../utils/shellAstParser.js';
+import {
+  getBackgroundTaskExitPath,
+  getBackgroundTaskOutputPath,
+  getBackgroundTaskPidPath,
+  readBackgroundTaskPid,
+} from '../backgroundShells/diskOutput.js';
+import { startBackgroundShellWatcher } from '../backgroundShells/watcher.js';
 
 const debugLogger = createDebugLogger('SHELL');
 
@@ -232,11 +239,39 @@ export class ShellToolInvocation extends BaseToolInvocation<
       .toString('hex')}.tmp`;
     const tempFilePath = path.join(os.tmpdir(), tempFileName);
 
+    // Background-task disk capture (non-Windows only). When is_background
+    // is true we redirect stdout/stderr at the shell level into a per-task
+    // file so the OS keeps writing even after the wrapper exits — the
+    // detached process can no longer drop output on the floor.
+    const shouldRunInBackground = this.params.is_background;
+    const useDiskCapture = shouldRunInBackground && !isWindows;
+    const backgroundTaskId = useDiskCapture ? crypto.randomUUID() : undefined;
+    let backgroundOutputPath: string | undefined;
+    let backgroundExitPath: string | undefined;
+    let backgroundPidPath: string | undefined;
+    if (backgroundTaskId) {
+      backgroundOutputPath = getBackgroundTaskOutputPath(
+        this.config,
+        backgroundTaskId,
+      );
+      backgroundExitPath = getBackgroundTaskExitPath(
+        this.config,
+        backgroundTaskId,
+      );
+      backgroundPidPath = getBackgroundTaskPidPath(
+        this.config,
+        backgroundTaskId,
+      );
+      // Synchronous mkdir so the directory exists by the time the shell
+      // wrapper tries to redirect into it. The async ensureBackgroundTasksDir
+      // helper would put a microtask between us and ShellExecutionService.
+      fs.mkdirSync(path.dirname(backgroundOutputPath), { recursive: true });
+    }
+
     try {
       // Add co-author to git commit commands
       const processedCommand = this.addCoAuthorToGitCommit(strippedCommand);
 
-      const shouldRunInBackground = this.params.is_background;
       let finalCommand = processedCommand;
 
       // On non-Windows, use & to run in background.
@@ -254,19 +289,42 @@ export class ShellToolInvocation extends BaseToolInvocation<
       // On Windows, we rely on the race logic below to handle background tasks.
       // We just ensure the command string is clean.
       if (isWindows && shouldRunInBackground) {
-        finalCommand = finalCommand.trim().replace(/&+$/, '').trim();
+        // Strip any trailing & without a regex — `&+$` looked benign but
+        // tripped CodeQL's polynomial-redos rule. A simple loop has no
+        // backtracking risk and the same intent.
+        let s = finalCommand.trim();
+        while (s.endsWith('&')) s = s.slice(0, -1);
+        finalCommand = s.trimEnd();
       }
 
-      // On non-Windows background commands, wrap with pgrep to capture
-      // subprocess PIDs so we can report them to the user.
-      const commandToExecute =
-        !isWindows && shouldRunInBackground
-          ? (() => {
-              let command = finalCommand.trim();
-              if (!command.endsWith('&')) command += ';';
-              return `{ ${command} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
-            })()
-          : finalCommand;
+      // Build the shell wrapper.
+      // - For backgrounded commands with disk capture (non-Windows): redirect
+      //   stdout+stderr to <tasks>/<id>.output, capture the bg PID and exit
+      //   code via sentinel files so a Node-side watcher can detect exit.
+      // - For backgrounded commands on Windows: pass through unchanged
+      //   (relies on the race-return logic below; no & or pgrep wrapper).
+      // - For foreground commands: pass through unchanged.
+      const commandToExecute = (() => {
+        if (!shouldRunInBackground || !useDiskCapture) return finalCommand;
+        // Strip trailing & (and any preceding whitespace) — we'll re-add it
+        // on the subshell wrapper. Plain string ops instead of `\s*&\s*$`
+        // because the regex tripped CodeQL's polynomial-redos rule.
+        let inner = finalCommand.trim();
+        if (inner.endsWith('&')) inner = inner.slice(0, -1).trimEnd();
+        return [
+          // (<cmd>) >output 2>&1; echo $? >exit  — runs in its own subshell
+          // detached with `&`, so the OS keeps writing even after our
+          // wrapper exits. Sentinel files let the Node watcher detect
+          // completion without re-reading stdout.
+          `{ ( ${inner} ) > "${backgroundOutputPath}" 2>&1; echo $? > "${backgroundExitPath}"; } &`,
+          // capture the spawned subshell's PID
+          `__bgpid=$!`,
+          `echo $__bgpid > "${backgroundPidPath}"`,
+          // pgrep for legacy "child PIDs" reporting
+          `pgrep -g 0 > ${tempFilePath} 2>&1`,
+          `exit 0`,
+        ].join('\n');
+      })();
 
       const cwd = this.params.directory || this.config.getTargetDir();
 
@@ -372,6 +430,41 @@ export class ShellToolInvocation extends BaseToolInvocation<
               ? ` PID: ${pid}`
               : '';
         const killHint = ' (Use kill <pid> to stop)';
+
+        // For non-Windows background tasks: register with the registry,
+        // start the watcher, and return the disk-capture file path so the
+        // model can Read it later.
+        if (backgroundTaskId && backgroundOutputPath) {
+          const realPid = await readBackgroundTaskPid(
+            this.config,
+            backgroundTaskId,
+          );
+          const registry = this.config.getBackgroundShellRegistry();
+          registry.register({
+            id: backgroundTaskId,
+            command: this.params.command,
+            description: this.params.description ?? this.params.command,
+            cwd,
+            outputPath: backgroundOutputPath,
+            pid: realPid ?? undefined,
+          });
+          startBackgroundShellWatcher(this.config, backgroundTaskId);
+
+          const lines = [
+            `Background command started.`,
+            `Task ID: ${backgroundTaskId}`,
+            `Output file: ${backgroundOutputPath}`,
+            `PID: ${realPid ?? '(unknown)'}${bgPidMsg ? ` Children${bgPidMsg.replace(/^ PIDs:/, ':')}` : ''}`,
+            `Read the output file at any time to check progress. You will`,
+            `be notified via <task_notification> when the task completes.`,
+            `Stop early with the bg_stop tool (task_id="${backgroundTaskId}").`,
+          ];
+          const message = lines.join('\n');
+          return {
+            llmContent: message,
+            returnDisplay: message,
+          };
+        }
 
         return {
           llmContent: `Background command started.${bgPidMsg}${killHint}`,
@@ -587,6 +680,7 @@ IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO N
   - Database servers: \`mongod\`, \`mysql\`, \`redis-server\`
   - Web servers: \`python -m http.server\`, \`php -S localhost:8000\`
   - Any command expected to run indefinitely until manually stopped
+  - Long-running batch jobs whose stdout you'll want to inspect later (evals, data processing, CI runs)
 ${processGroupNote}
 - Use foreground execution (is_background: false) for:
   - One-time commands: \`ls\`, \`cat\`, \`grep\`
@@ -594,6 +688,12 @@ ${processGroupNote}
   - Installation commands: \`npm install\`, \`pip install\`
   - Git operations: \`git commit\`, \`git push\`
   - Test runs: \`npm test\`, \`pytest\`
+
+**How background tasks work (non-Windows):**
+- The tool result returns a stable \`Task ID\` and an absolute \`Output file\` path. stdout and stderr are redirected at the shell level, so the OS keeps writing even after this tool returns. **Output is never lost** — read the file with the ${ToolNames.READ_FILE} tool whenever you want to inspect progress or final results.
+- When the process exits, the next user turn includes a \`<task_notification>\` block with the task's \`status\` (completed | failed | killed), \`exit_code\`, and \`output_file\` path. **Do not poll** — the notification arrives automatically.
+- Stop a runaway background task with the \`${ToolNames.BG_STOP}\` tool, passing the \`task_id\` from the original tool result. It SIGTERMs the process group and escalates to SIGKILL after a short grace period.
+- Output files live under the project temp dir; they survive across turns within a session and can grow large. Prefer the ${ToolNames.READ_FILE} tool (which tail-reads with a cap) over a shell \`cat\` for large outputs.
 `;
 }
 
@@ -627,7 +727,7 @@ export class ShellTool extends BaseDeclarativeTool<
           is_background: {
             type: 'boolean',
             description:
-              'Optional: Whether to run the command in background. If not specified, defaults to false (foreground execution). Explicitly set to true for long-running processes like development servers, watchers, or daemons that should continue running without blocking further commands.',
+              'Optional: Whether to run the command in background. Defaults to false. Set to true for long-running processes (servers, watchers, evals, batch jobs). Background tasks return a Task ID and an Output file path; stdout/stderr is redirected to that file by the OS so output survives even after this tool returns. You will receive a <task_notification> on the next turn when the task exits — do not poll. Stop a runaway task with the bg_stop tool.',
           },
           timeout: {
             type: 'number',

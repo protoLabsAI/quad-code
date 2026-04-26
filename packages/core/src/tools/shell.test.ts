@@ -75,6 +75,13 @@ describe('ShellTool', () => {
         email: 'qwen-coder@alibabacloud.com',
       }),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
+      getSessionId: vi.fn().mockReturnValue('test-session'),
+      getBackgroundShellRegistry: vi.fn().mockReturnValue({
+        register: vi.fn(),
+        update: vi.fn(),
+        markExit: vi.fn(),
+        get: vi.fn(),
+      }),
     } as unknown as Config;
 
     shellTool = new ShellTool(mockConfig);
@@ -83,6 +90,9 @@ describe('ShellTool', () => {
     vi.mocked(os.tmpdir).mockReturnValue('/tmp');
     (vi.mocked(crypto.randomBytes) as Mock).mockReturnValue(
       Buffer.from('abcdef', 'hex'),
+    );
+    vi.mocked(crypto.randomUUID).mockReturnValue(
+      '00000000-0000-0000-0000-000000000000',
     );
 
     // Capture the output callback to simulate streaming events from the service
@@ -288,7 +298,15 @@ describe('ShellTool', () => {
       const result = await promise;
 
       const tmpFile = path.join(os.tmpdir(), 'shell_pgrep_abcdef.tmp');
-      const wrappedCommand = `{ my-command & }; __code=$?; pgrep -g 0 >${tmpFile} 2>&1; exit $__code;`;
+      const tasksDir =
+        '/tmp/qwen-temp/test-session/tasks/00000000-0000-0000-0000-000000000000';
+      const wrappedCommand = [
+        `{ ( my-command ) > "${tasksDir}.output" 2>&1; echo $? > "${tasksDir}.exit"; } &`,
+        `__bgpid=$!`,
+        `echo $__bgpid > "${tasksDir}.pid"`,
+        `pgrep -g 0 > ${tmpFile} 2>&1`,
+        `exit 0`,
+      ].join('\n');
       expect(mockShellExecutionService).toHaveBeenCalledWith(
         wrappedCommand,
         '/test/dir',
@@ -297,7 +315,11 @@ describe('ShellTool', () => {
         false,
         {},
       );
-      expect(result.llmContent).toContain('PIDs: 54322');
+      expect(result.llmContent).toContain('Background command started.');
+      expect(result.llmContent).toContain(
+        'Task ID: 00000000-0000-0000-0000-000000000000',
+      );
+      expect(result.llmContent).toContain(`Output file: ${tasksDir}.output`);
       expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(tmpFile);
     });
 
@@ -315,7 +337,15 @@ describe('ShellTool', () => {
       await promise;
 
       const tmpFile = path.join(os.tmpdir(), 'shell_pgrep_abcdef.tmp');
-      const wrappedCommand = `{ npm start & }; __code=$?; pgrep -g 0 >${tmpFile} 2>&1; exit $__code;`;
+      const tasksDir =
+        '/tmp/qwen-temp/test-session/tasks/00000000-0000-0000-0000-000000000000';
+      const wrappedCommand = [
+        `{ ( npm start ) > "${tasksDir}.output" 2>&1; echo $? > "${tasksDir}.exit"; } &`,
+        `__bgpid=$!`,
+        `echo $__bgpid > "${tasksDir}.pid"`,
+        `pgrep -g 0 > ${tmpFile} 2>&1`,
+        `exit 0`,
+      ].join('\n');
       expect(mockShellExecutionService).toHaveBeenCalledWith(
         wrappedCommand,
         expect.any(String),
@@ -340,7 +370,15 @@ describe('ShellTool', () => {
       await promise;
 
       const tmpFile = path.join(os.tmpdir(), 'shell_pgrep_abcdef.tmp');
-      const wrappedCommand = `{ npm start & }; __code=$?; pgrep -g 0 >${tmpFile} 2>&1; exit $__code;`;
+      const tasksDir =
+        '/tmp/qwen-temp/test-session/tasks/00000000-0000-0000-0000-000000000000';
+      const wrappedCommand = [
+        `{ ( npm start ) > "${tasksDir}.output" 2>&1; echo $? > "${tasksDir}.exit"; } &`,
+        `__bgpid=$!`,
+        `echo $__bgpid > "${tasksDir}.pid"`,
+        `pgrep -g 0 > ${tmpFile} 2>&1`,
+        `exit 0`,
+      ].join('\n');
       expect(mockShellExecutionService).toHaveBeenCalledWith(
         wrappedCommand,
         expect.any(String),

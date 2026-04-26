@@ -67,6 +67,7 @@ import { TaskUpdateTool } from '../tools/task-update.js';
 import { TaskStopTool } from '../tools/task-stop.js';
 import { TaskOutputTool } from '../tools/task-output.js';
 import { TaskReadyTool } from '../tools/task-ready.js';
+import { BgStopTool } from '../tools/bg-stop.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
 import { WebFetchTool } from '../tools/web-fetch.js';
 import { WebSearchTool } from '../tools/web-search/index.js';
@@ -133,6 +134,7 @@ import {
 import { DEFAULT_QWEN_EMBEDDING_MODEL } from './models.js';
 import { Storage } from './storage.js';
 import { TaskStore } from '../services/task-store.js';
+import { BackgroundShellRegistry } from '../backgroundShells/registry.js';
 import { ChatRecordingService } from '../services/chatRecordingService.js';
 import {
   MemoryConsolidationService,
@@ -667,6 +669,7 @@ export class Config {
   ) => Promise<void>;
   private initialized: boolean = false;
   private taskStore?: TaskStore;
+  private backgroundShellRegistry?: BackgroundShellRegistry;
   private memoryConsolidationService?: MemoryConsolidationService;
   private readonly memoryConsolidationConfig?: Partial<ConsolidationConfig>;
   readonly storage: Storage;
@@ -1217,6 +1220,18 @@ export class Config {
       );
     }
     return this.taskStore;
+  }
+
+  /**
+   * Returns the registry of long-running background shell tasks. Lazy
+   * — only constructed once a task is registered. Disk capture lives at
+   * <projectTempDir>/<sessionId>/tasks/<taskId>.output.
+   */
+  getBackgroundShellRegistry(): BackgroundShellRegistry {
+    if (!this.backgroundShellRegistry) {
+      this.backgroundShellRegistry = new BackgroundShellRegistry();
+    }
+    return this.backgroundShellRegistry;
   }
 
   /**
@@ -2363,6 +2378,7 @@ export class Config {
     await registerCoreTool(TaskStopTool, this);
     await registerCoreTool(TaskOutputTool, this);
     await registerCoreTool(TaskReadyTool, this);
+    await registerCoreTool(BgStopTool, this);
     await registerCoreTool(AskUserQuestionTool, this);
     !this.sdkMode && (await registerCoreTool(ExitPlanModeTool, this));
     await registerCoreTool(WebFetchTool, this);
