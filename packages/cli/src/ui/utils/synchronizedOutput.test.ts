@@ -32,8 +32,13 @@ describe('terminalSupportsSynchronizedOutput', () => {
   it.each([
     [{ TERM_PROGRAM: 'WezTerm' }, true],
     [{ TERM_PROGRAM: 'iTerm.app' }, true],
+    [{ TERM_PROGRAM: 'ghostty' }, true],
+    [{ GHOSTTY_RESOURCES_DIR: '/Applications/Ghostty.app/...' }, true],
     [{ TERM: 'xterm-kitty' }, true],
     [{ KITTY_WINDOW_ID: '1' }, true],
+    [{ ALACRITTY_WINDOW_ID: '12345' }, true],
+    [{ TERM: 'alacritty' }, true],
+    [{ TERM: 'alacritty-direct' }, true],
     [{ TERM_PROGRAM: 'Apple_Terminal' }, false],
     [{ TERM_PROGRAM: 'JetBrains-JediTerm' }, false],
     [{ TERM_PROGRAM: 'WezTerm', TMUX: '/tmp/tmux' }, false],
