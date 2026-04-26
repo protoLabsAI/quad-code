@@ -51,6 +51,7 @@ import { setupCommand } from '../ui/commands/setupCommand.js';
 import { insightCommand } from '../ui/commands/insightCommand.js';
 import { teamCommand } from '../ui/commands/teamCommand.js';
 import { voiceCommand } from '../ui/commands/voiceCommand.js';
+import { recapCommand } from '../ui/commands/recapCommand.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -112,6 +113,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       terminalSetupCommand,
       insightCommand,
       voiceCommand,
+      recapCommand,
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);

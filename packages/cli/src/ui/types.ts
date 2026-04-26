@@ -362,6 +362,14 @@ export type HistoryItemBtw = HistoryItemBase & {
   btw: BtwProps;
 };
 
+/**
+ * "Where we left off" recap card, appended after long agent turns.
+ */
+export type HistoryItemRecap = HistoryItemBase & {
+  type: 'recap';
+  text: string;
+};
+
 // Using Omit<HistoryItem, 'id'> seems to have some issues with typescript's
 // type inference e.g. historyItem.type === 'tool_group' isn't auto-inferring that
 // 'tools' in historyItem.
@@ -396,7 +404,8 @@ export type HistoryItemWithoutId =
   | HistoryItemArenaAgentComplete
   | HistoryItemArenaSessionComplete
   | HistoryItemInsightProgress
-  | HistoryItemBtw;
+  | HistoryItemBtw
+  | HistoryItemRecap;
 
 export type HistoryItem = HistoryItemWithoutId & { id: number };
 
@@ -425,6 +434,7 @@ export enum MessageType {
   ARENA_SESSION_COMPLETE = 'arena_session_complete',
   INSIGHT_PROGRESS = 'insight_progress',
   BTW = 'btw',
+  RECAP = 'recap',
 }
 
 export interface InsightProgressProps {
