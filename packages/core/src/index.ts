@@ -99,6 +99,7 @@ export * from './tools/task-list.js';
 export * from './tools/task-update.js';
 export * from './tools/task-stop.js';
 export * from './tools/task-output.js';
+export * from './tools/bg-stop.js';
 export * from './services/task-store.js';
 export * from './tools/tool-error.js';
 export * from './tools/tool-registry.js';
@@ -243,6 +244,12 @@ export * from './followup/index.js';
 // ============================================================================
 
 export * from './recap/index.js';
+
+// ============================================================================
+// Background shell tasks (long-running `is_background: true` commands)
+// ============================================================================
+
+export * from './backgroundShells/index.js';
 
 // ============================================================================
 // Utilities

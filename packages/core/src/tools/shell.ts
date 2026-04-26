@@ -43,6 +43,13 @@ import {
   isShellCommandReadOnlyAST,
   extractCommandRules,
 } from '../utils/shellAstParser.js';
+import {
+  getBackgroundTaskExitPath,
+  getBackgroundTaskOutputPath,
+  getBackgroundTaskPidPath,
+  readBackgroundTaskPid,
+} from '../backgroundShells/diskOutput.js';
+import { startBackgroundShellWatcher } from '../backgroundShells/watcher.js';
 
 const debugLogger = createDebugLogger('SHELL');
 
@@ -232,11 +239,39 @@ export class ShellToolInvocation extends BaseToolInvocation<
       .toString('hex')}.tmp`;
     const tempFilePath = path.join(os.tmpdir(), tempFileName);
 
+    // Background-task disk capture (non-Windows only). When is_background
+    // is true we redirect stdout/stderr at the shell level into a per-task
+    // file so the OS keeps writing even after the wrapper exits — the
+    // detached process can no longer drop output on the floor.
+    const shouldRunInBackground = this.params.is_background;
+    const useDiskCapture = shouldRunInBackground && !isWindows;
+    const backgroundTaskId = useDiskCapture ? crypto.randomUUID() : undefined;
+    let backgroundOutputPath: string | undefined;
+    let backgroundExitPath: string | undefined;
+    let backgroundPidPath: string | undefined;
+    if (backgroundTaskId) {
+      backgroundOutputPath = getBackgroundTaskOutputPath(
+        this.config,
+        backgroundTaskId,
+      );
+      backgroundExitPath = getBackgroundTaskExitPath(
+        this.config,
+        backgroundTaskId,
+      );
+      backgroundPidPath = getBackgroundTaskPidPath(
+        this.config,
+        backgroundTaskId,
+      );
+      // Synchronous mkdir so the directory exists by the time the shell
+      // wrapper tries to redirect into it. The async ensureBackgroundTasksDir
+      // helper would put a microtask between us and ShellExecutionService.
+      fs.mkdirSync(path.dirname(backgroundOutputPath), { recursive: true });
+    }
+
     try {
       // Add co-author to git commit commands
       const processedCommand = this.addCoAuthorToGitCommit(strippedCommand);
 
-      const shouldRunInBackground = this.params.is_background;
       let finalCommand = processedCommand;
 
       // On non-Windows, use & to run in background.
@@ -257,16 +292,31 @@ export class ShellToolInvocation extends BaseToolInvocation<
         finalCommand = finalCommand.trim().replace(/&+$/, '').trim();
       }
 
-      // On non-Windows background commands, wrap with pgrep to capture
-      // subprocess PIDs so we can report them to the user.
-      const commandToExecute =
-        !isWindows && shouldRunInBackground
-          ? (() => {
-              let command = finalCommand.trim();
-              if (!command.endsWith('&')) command += ';';
-              return `{ ${command} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
-            })()
-          : finalCommand;
+      // Build the shell wrapper.
+      // - For backgrounded commands with disk capture (non-Windows): redirect
+      //   stdout+stderr to <tasks>/<id>.output, capture the bg PID and exit
+      //   code via sentinel files so a Node-side watcher can detect exit.
+      // - For backgrounded commands on Windows: pass through unchanged
+      //   (relies on the race-return logic below; no & or pgrep wrapper).
+      // - For foreground commands: pass through unchanged.
+      const commandToExecute = (() => {
+        if (!shouldRunInBackground || !useDiskCapture) return finalCommand;
+        // Strip trailing & — we'll re-add it on the subshell wrapper.
+        const inner = finalCommand.trim().replace(/\s*&\s*$/, '');
+        return [
+          // (<cmd>) >output 2>&1; echo $? >exit  — runs in its own subshell
+          // detached with `&`, so the OS keeps writing even after our
+          // wrapper exits. Sentinel files let the Node watcher detect
+          // completion without re-reading stdout.
+          `{ ( ${inner} ) > "${backgroundOutputPath}" 2>&1; echo $? > "${backgroundExitPath}"; } &`,
+          // capture the spawned subshell's PID
+          `__bgpid=$!`,
+          `echo $__bgpid > "${backgroundPidPath}"`,
+          // pgrep for legacy "child PIDs" reporting
+          `pgrep -g 0 > ${tempFilePath} 2>&1`,
+          `exit 0`,
+        ].join('\n');
+      })();
 
       const cwd = this.params.directory || this.config.getTargetDir();
 
@@ -372,6 +422,41 @@ export class ShellToolInvocation extends BaseToolInvocation<
               ? ` PID: ${pid}`
               : '';
         const killHint = ' (Use kill <pid> to stop)';
+
+        // For non-Windows background tasks: register with the registry,
+        // start the watcher, and return the disk-capture file path so the
+        // model can Read it later.
+        if (backgroundTaskId && backgroundOutputPath) {
+          const realPid = await readBackgroundTaskPid(
+            this.config,
+            backgroundTaskId,
+          );
+          const registry = this.config.getBackgroundShellRegistry();
+          registry.register({
+            id: backgroundTaskId,
+            command: this.params.command,
+            description: this.params.description ?? this.params.command,
+            cwd,
+            outputPath: backgroundOutputPath,
+            pid: realPid ?? undefined,
+          });
+          startBackgroundShellWatcher(this.config, backgroundTaskId);
+
+          const lines = [
+            `Background command started.`,
+            `Task ID: ${backgroundTaskId}`,
+            `Output file: ${backgroundOutputPath}`,
+            `PID: ${realPid ?? '(unknown)'}${bgPidMsg ? ` Children${bgPidMsg.replace(/^ PIDs:/, ':')}` : ''}`,
+            `Read the output file at any time to check progress. You will`,
+            `be notified via <task_notification> when the task completes.`,
+            `Stop early with the bg_stop tool (task_id="${backgroundTaskId}").`,
+          ];
+          const message = lines.join('\n');
+          return {
+            llmContent: message,
+            returnDisplay: message,
+          };
+        }
 
         return {
           llmContent: `Background command started.${bgPidMsg}${killHint}`,
