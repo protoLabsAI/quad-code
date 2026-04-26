@@ -53,12 +53,34 @@ export function terminalSupportsSynchronizedOutput(
   }
 
   const termProgram = env['TERM_PROGRAM'];
-  if (termProgram === 'WezTerm' || termProgram === 'iTerm.app') {
+  if (
+    termProgram === 'WezTerm' ||
+    termProgram === 'iTerm.app' ||
+    termProgram === 'ghostty'
+  ) {
+    return true;
+  }
+
+  // Alacritty added synchronized output (DEC mode 2026) in v0.14 (Jan 2024).
+  // Detect via ALACRITTY_WINDOW_ID (set since recent versions) or TERM/COLORTERM.
+  if (env['ALACRITTY_WINDOW_ID']) {
     return true;
   }
 
   const term = env['TERM'];
-  return Boolean(env['KITTY_WINDOW_ID'] || term?.includes('kitty'));
+  if (env['KITTY_WINDOW_ID'] || term?.includes('kitty')) {
+    return true;
+  }
+  if (term?.startsWith('alacritty')) {
+    return true;
+  }
+
+  // Ghostty sets TERM_PROGRAM=ghostty; also exposes GHOSTTY_RESOURCES_DIR.
+  if (env['GHOSTTY_RESOURCES_DIR']) {
+    return true;
+  }
+
+  return false;
 }
 
 export function installSynchronizedOutput(

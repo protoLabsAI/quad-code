@@ -12,7 +12,8 @@ import { DiffRenderer } from './DiffRenderer.js';
 import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
 import { AnsiOutputText } from '../AnsiOutput.js';
 import { GeminiRespondingSpinner } from '../GeminiRespondingSpinner.js';
-import { MaxSizedBox } from '../shared/MaxSizedBox.js';
+import { MaxSizedBox, MINIMUM_MAX_HEIGHT } from '../shared/MaxSizedBox.js';
+import { getCachedStringWidth, toCodePoints } from '../../utils/textUtils.js';
 import { TodoDisplay } from '../TodoDisplay.js';
 import type {
   TodoResultDisplay,
@@ -45,6 +46,76 @@ const MIN_LINES_SHOWN = 2; // show at least this many lines
 // outputs that will get truncated further MaxSizedBox anyway.
 const MAXIMUM_RESULT_DISPLAY_CHARACTERS = 1000000;
 export type TextEmphasis = 'high' | 'medium' | 'low';
+
+/**
+ * Pre-slice tool text output by visual height before it reaches Ink layout.
+ *
+ * Without this, a single 160k-character line never gets sliced because
+ * `lines.length === 1 <= maxHeight`, but Ink's `Text wrap` will still
+ * compute layout over the full unbounded string. Account for terminal
+ * soft-wrapping by tracking visual width per code point.
+ *
+ * Returns `{ text, hiddenLinesCount }` so the caller can pass
+ * `additionalHiddenLinesCount` to `MaxSizedBox`.
+ */
+function sliceTextForMaxHeight(
+  text: string,
+  maxHeight: number | undefined,
+  maxWidth: number,
+): { text: string; hiddenLinesCount: number } {
+  if (maxHeight === undefined) {
+    return { text, hiddenLinesCount: 0 };
+  }
+
+  const targetMaxHeight = Math.max(Math.round(maxHeight), MINIMUM_MAX_HEIGHT);
+  const visibleContentHeight = targetMaxHeight - 1;
+  const visualWidth = Math.max(1, Math.floor(maxWidth));
+  const visibleLines: string[] = [];
+  let visualLineCount = 0;
+  let currentLine = '';
+  let currentLineWidth = 0;
+
+  const appendVisibleLine = (line: string) => {
+    visualLineCount += 1;
+    visibleLines.push(line);
+    if (visibleLines.length > visibleContentHeight) {
+      visibleLines.shift();
+    }
+  };
+
+  const flushCurrentLine = () => {
+    appendVisibleLine(currentLine);
+    currentLine = '';
+    currentLineWidth = 0;
+  };
+
+  for (const char of toCodePoints(text)) {
+    if (char === '\n') {
+      flushCurrentLine();
+      continue;
+    }
+
+    const charWidth = Math.max(getCachedStringWidth(char), 1);
+    if (currentLineWidth > 0 && currentLineWidth + charWidth > visualWidth) {
+      flushCurrentLine();
+    }
+
+    currentLine += char;
+    currentLineWidth += charWidth;
+  }
+
+  flushCurrentLine();
+
+  if (visualLineCount <= targetMaxHeight) {
+    return { text, hiddenLinesCount: 0 };
+  }
+
+  const hiddenLinesCount = visualLineCount - visibleContentHeight;
+  return {
+    text: visibleLines.join('\n'),
+    hiddenLinesCount,
+  };
+}
 
 type DisplayRendererResult =
   | { type: 'none' }
@@ -227,11 +298,21 @@ const StringResultRenderer: React.FC<{
     );
   }
 
+  const sliced = sliceTextForMaxHeight(
+    displayData,
+    availableHeight,
+    childWidth,
+  );
+
   return (
-    <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
+    <MaxSizedBox
+      maxHeight={availableHeight}
+      maxWidth={childWidth}
+      additionalHiddenLinesCount={sliced.hiddenLinesCount}
+    >
       <Box>
         <Text wrap="wrap" color={theme.text.primary}>
-          {displayData}
+          {sliced.text}
         </Text>
       </Box>
     </MaxSizedBox>
