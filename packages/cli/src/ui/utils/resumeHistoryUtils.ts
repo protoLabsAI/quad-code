@@ -15,6 +15,7 @@ import type {
   SlashCommandRecordPayload,
   AtCommandRecordPayload,
 } from '@qwen-code/qwen-code-core';
+import { isInternalPart } from '@qwen-code/qwen-code-core';
 import type {
   HistoryItem,
   HistoryItemWithoutId,
@@ -31,7 +32,8 @@ function extractTextFromParts(parts: Part[] | undefined): string {
   const textParts: string[] = [];
   for (const part of parts) {
     if ('text' in part && part.text) {
-      // Skip thought parts - they have a 'thought' property
+      // Skip thought parts and internal (UI-hidden) parts
+      if (isInternalPart(part)) continue;
       if (!('thought' in part && part.thought)) {
         textParts.push(part.text);
       }
@@ -50,6 +52,7 @@ function extractThoughtTextFromParts(parts: Part[] | undefined): string {
   const thoughtParts: string[] = [];
   for (const part of parts) {
     if ('text' in part && part.text && 'thought' in part && part.thought) {
+      if (isInternalPart(part)) continue;
       thoughtParts.push(part.text);
     }
   }

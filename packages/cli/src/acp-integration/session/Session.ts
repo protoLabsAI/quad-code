@@ -22,6 +22,7 @@ import {
   ApprovalMode,
   convertToFunctionResponse,
   createDebugLogger,
+  isInternalPart,
   DiscoveredMCPTool,
   StreamEventType,
   ToolConfirmationOutcome,
@@ -351,7 +352,7 @@ export class Session implements SessionContext {
               ) {
                 const candidate = resp.value.candidates[0];
                 for (const part of candidate.content?.parts ?? []) {
-                  if (!part.text) {
+                  if (!part.text || isInternalPart(part)) {
                     continue;
                   }
 
@@ -533,7 +534,7 @@ export class Session implements SessionContext {
               ) {
                 const candidate = resp.value.candidates[0];
                 for (const part of candidate.content?.parts ?? []) {
-                  if (!part.text) continue;
+                  if (!part.text || isInternalPart(part)) continue;
                   this.messageEmitter.emitMessage(
                     part.text,
                     'assistant',
