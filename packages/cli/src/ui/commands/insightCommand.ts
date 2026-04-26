@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { CommandContext, SlashCommand } from './types.js';
+import type {
+  CommandContext,
+  SlashCommand,
+  SlashCommandActionReturn,
+} from './types.js';
 import { CommandKind } from './types.js';
 import { MessageType } from '../types.js';
 import type { HistoryItemInsightProgress } from '../types.js';
@@ -12,9 +16,39 @@ import { t } from '../../i18n/index.js';
 import { join } from 'path';
 import { StaticInsightGenerator } from '../../services/insight/generators/StaticInsightGenerator.js';
 import { createDebugLogger, Storage } from '@qwen-code/qwen-code-core';
+import { SettingScope } from '../../config/settings.js';
 import open from 'open';
 
 const logger = createDebugLogger('DataProcessor');
+
+function statusMessage(context: CommandContext): SlashCommandActionReturn {
+  const enabled = context.services.settings.merged.insight?.enabled ?? true;
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: enabled
+      ? 'Insight: enabled. Run /insight to generate a report.'
+      : 'Insight: disabled. Run /insight enable to turn it back on.',
+  };
+}
+
+function setEnabled(
+  context: CommandContext,
+  value: boolean,
+): SlashCommandActionReturn {
+  context.services.settings.setValue(
+    SettingScope.User,
+    'insight.enabled',
+    value,
+  );
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: value
+      ? 'Insight enabled. Run /insight to generate a report.'
+      : 'Insight disabled. Run /insight enable to turn it back on.',
+  };
+}
 
 export const insightCommand: SlashCommand = {
   name: 'insight',
@@ -24,7 +58,41 @@ export const insightCommand: SlashCommand = {
     );
   },
   kind: CommandKind.BUILT_IN,
+  subCommands: [
+    {
+      name: 'status',
+      description: 'Show insight enabled status',
+      kind: CommandKind.BUILT_IN,
+      action: statusMessage,
+    },
+    {
+      name: 'enable',
+      description: 'Enable /insight report generation',
+      kind: CommandKind.BUILT_IN,
+      action: (context: CommandContext): SlashCommandActionReturn =>
+        setEnabled(context, true),
+    },
+    {
+      name: 'disable',
+      description: 'Disable /insight report generation',
+      kind: CommandKind.BUILT_IN,
+      action: (context: CommandContext): SlashCommandActionReturn =>
+        setEnabled(context, false),
+    },
+  ],
   action: async (context: CommandContext) => {
+    if (context.services.settings.merged.insight?.enabled === false) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: t(
+            'Insight is disabled. Run /insight enable to turn it back on.',
+          ),
+        },
+        Date.now(),
+      );
+      return;
+    }
     try {
       context.ui.setDebugMessage(t('Generating insights...'));
 

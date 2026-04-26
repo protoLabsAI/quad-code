@@ -51,9 +51,40 @@ cargo install beads_rust
 
 ## Quick Start
 
-### 1. Configure your endpoint
+### 1. Run the setup wizard
 
-proto connects to any OpenAI-compatible API. Create `~/.proto/settings.json`:
+```bash
+proto setup
+```
+
+`proto setup` is an interactive wizard that picks a provider (OpenAI, Anthropic, Gemini, or any OpenAI-compatible endpoint), discovers the available models, optionally configures voice/STT, and writes everything to `~/.proto/settings.json` for you. Re-run it any time to switch providers or pick a different default model.
+
+### 2. Set your API key
+
+The wizard tells you which env var it expects (e.g. `OPENAI_API_KEY`). Set it once:
+
+```bash
+export OPENAI_API_KEY=sk-your-key-here
+```
+
+Or persist it in `~/.proto/.env`:
+
+```
+OPENAI_API_KEY=sk-your-key-here
+```
+
+### 3. Run proto
+
+```bash
+proto                            # interactive mode
+proto -p "explain this codebase" # one-shot mode
+```
+
+No auth screen — proto connects directly to your endpoint.
+
+### Manual setup (advanced)
+
+If you'd rather skip the wizard, drop a `~/.proto/settings.json` of your own:
 
 ```json
 {
@@ -73,25 +104,6 @@ proto connects to any OpenAI-compatible API. Create `~/.proto/settings.json`:
   "model": { "name": "my-model" }
 }
 ```
-
-### 2. Set your API key
-
-Create `~/.proto/.env`:
-
-```
-MY_API_KEY=sk-your-key-here
-```
-
-Or export it in your shell: `export MY_API_KEY=sk-your-key-here`
-
-### 3. Run proto
-
-```bash
-proto                            # interactive mode
-proto -p "explain this codebase" # one-shot mode
-```
-
-No auth screen — proto connects directly to your endpoint.
 
 ### Example: Multiple models via a gateway
 
