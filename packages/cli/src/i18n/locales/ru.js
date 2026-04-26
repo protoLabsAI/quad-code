@@ -328,7 +328,7 @@ export default {
   'Custom Witty Phrases': 'Пользовательские остроумные фразы',
   'Show Welcome Back Dialog': 'Показывать диалог приветствия',
   'Enable User Feedback': 'Включить отзывы пользователей',
-  'How is Qwen doing this session? (optional)':
+  'How is proto doing this session? (optional)':
     'Как дела у Qwen в этой сессии? (необязательно)',
   Bad: 'Плохо',
   Fine: 'Нормально',

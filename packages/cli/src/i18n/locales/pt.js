@@ -330,7 +330,7 @@ export default {
   'Custom Witty Phrases': 'Frases de Efeito Personalizadas',
   'Show Welcome Back Dialog': 'Mostrar Diálogo de Bem-vindo de Volta',
   'Enable User Feedback': 'Ativar Feedback do Usuário',
-  'How is Qwen doing this session? (optional)':
+  'How is proto doing this session? (optional)':
     'Como o Qwen está se saindo nesta sessão? (opcional)',
   Bad: 'Ruim',
   Fine: 'Bom',
