@@ -1,6 +1,6 @@
 {
   "name": "@protolabsai/proto",
-  "version": "0.26.5",
+  "version": "0.26.6",
   "publishConfig": {
     "access": "public"
   },
@@ -20,7 +20,7 @@
     "url": "https://github.com/protoLabsAI/protoCLI/issues"
   },
   "config": {
-    "sandboxImageUri": "ghcr.io/qwenlm/qwen-code:0.26.5"
+    "sandboxImageUri": "ghcr.io/qwenlm/qwen-code:0.26.6"
   },
   "scripts": {
     "start": "cross-env node scripts/start.js",
