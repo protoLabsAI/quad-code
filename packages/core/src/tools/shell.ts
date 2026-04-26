@@ -672,6 +672,7 @@ IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO N
   - Database servers: \`mongod\`, \`mysql\`, \`redis-server\`
   - Web servers: \`python -m http.server\`, \`php -S localhost:8000\`
   - Any command expected to run indefinitely until manually stopped
+  - Long-running batch jobs whose stdout you'll want to inspect later (evals, data processing, CI runs)
 ${processGroupNote}
 - Use foreground execution (is_background: false) for:
   - One-time commands: \`ls\`, \`cat\`, \`grep\`
@@ -679,6 +680,12 @@ ${processGroupNote}
   - Installation commands: \`npm install\`, \`pip install\`
   - Git operations: \`git commit\`, \`git push\`
   - Test runs: \`npm test\`, \`pytest\`
+
+**How background tasks work (non-Windows):**
+- The tool result returns a stable \`Task ID\` and an absolute \`Output file\` path. stdout and stderr are redirected at the shell level, so the OS keeps writing even after this tool returns. **Output is never lost** — read the file with the ${ToolNames.READ_FILE} tool whenever you want to inspect progress or final results.
+- When the process exits, the next user turn includes a \`<task_notification>\` block with the task's \`status\` (completed | failed | killed), \`exit_code\`, and \`output_file\` path. **Do not poll** — the notification arrives automatically.
+- Stop a runaway background task with the \`${ToolNames.BG_STOP}\` tool, passing the \`task_id\` from the original tool result. It SIGTERMs the process group and escalates to SIGKILL after a short grace period.
+- Output files live under the project temp dir; they survive across turns within a session and can grow large. Prefer the ${ToolNames.READ_FILE} tool (which tail-reads with a cap) over a shell \`cat\` for large outputs.
 `;
 }
 
@@ -712,7 +719,7 @@ export class ShellTool extends BaseDeclarativeTool<
           is_background: {
             type: 'boolean',
             description:
-              'Optional: Whether to run the command in background. If not specified, defaults to false (foreground execution). Explicitly set to true for long-running processes like development servers, watchers, or daemons that should continue running without blocking further commands.',
+              'Optional: Whether to run the command in background. Defaults to false. Set to true for long-running processes (servers, watchers, evals, batch jobs). Background tasks return a Task ID and an Output file path; stdout/stderr is redirected to that file by the OS so output survives even after this tool returns. You will receive a <task_notification> on the next turn when the task exits — do not poll. Stop a runaway task with the bg_stop tool.',
           },
           timeout: {
             type: 'number',

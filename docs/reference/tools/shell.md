@@ -30,10 +30,29 @@ Executes a shell command. On macOS/Linux, runs with `bash -c`. On Windows, runs 
 - Build watchers (`webpack --watch`)
 - Database servers (`mongod`, `redis-server`)
 - Any process that runs indefinitely
+- Long batch jobs whose stdout you want to inspect later (evals, data processing)
 
 ## Output
 
-Returns `Command`, `Directory`, `Stdout`, `Stderr`, `Error`, `Exit Code`, `Signal`, and `Background PIDs`.
+For **foreground** commands, the tool returns `Command`, `Directory`, `Stdout`, `Stderr`, `Error`, `Exit Code`, `Signal`, and `Process Group PGID`.
+
+For **background** commands on non-Windows, the tool returns:
+
+- `Task ID` — opaque stable ID used to refer to the task later
+- `Output file` — absolute path where stdout+stderr is captured (writes continue after the wrapper exits)
+- `PID` — actual subprocess PID
+
+Read the output file at any time with the [`read_file`](./read-file) tool to inspect progress or final results — there is no need to poll. When the process exits, the **next user prompt** is prefixed with a `<task_notification>` block carrying `task_id`, `output_file`, `status` (`completed`/`failed`/`killed`), `exit_code`, and a human summary.
+
+## Background tasks
+
+Output files live at `<projectTempDir>/<sessionId>/tasks/<taskId>.output` and are written via shell-level redirection (`( cmd ) > file 2>&1 &`). The OS keeps writing even after the parent shell exits, so detached processes never silently lose output.
+
+To stop a runaway background task, use the [`bg_stop`](./bg-stop) tool with the `task_id`. It SIGTERMs the process group and escalates to SIGKILL after a 3-second grace.
+
+To list running and recently-completed background tasks from the TUI, run `/bg`.
+
+> **Windows.** Background tasks rely on POSIX shell redirection and process-group signaling. On Windows, `is_background: true` falls back to the simpler "fire and return" path used in earlier versions; output is not captured to disk.
 
 ## Confirmation
 
