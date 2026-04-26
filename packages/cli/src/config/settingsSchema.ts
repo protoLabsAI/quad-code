@@ -883,13 +883,13 @@ const SETTINGS_SCHEMA = {
             description: 'Respect .gitignore files when searching',
             showInDialog: true,
           },
-          respectQwenIgnore: {
+          respectProtoIgnore: {
             type: 'boolean',
-            label: 'Respect .qwenignore',
+            label: 'Respect .protoignore',
             category: 'Context',
             requiresRestart: true,
             default: true,
-            description: 'Respect .qwenignore files when searching',
+            description: 'Respect .protoignore files when searching',
             showInDialog: true,
           },
           enableRecursiveFileSearch: {

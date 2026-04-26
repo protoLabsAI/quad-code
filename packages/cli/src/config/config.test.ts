@@ -148,11 +148,11 @@ vi.mock('@qwen-code/qwen-code-core', async (importOriginal) => {
     ),
     DEFAULT_MEMORY_FILE_FILTERING_OPTIONS: {
       respectGitIgnore: false,
-      respectQwenIgnore: true,
+      respectProtoIgnore: true,
     },
     DEFAULT_FILE_FILTERING_OPTIONS: {
       respectGitIgnore: true,
-      respectQwenIgnore: true,
+      respectProtoIgnore: true,
     },
   };
 });
@@ -2165,13 +2165,13 @@ describe('loadCliConfig fileFiltering', () => {
       value: false,
     },
     {
-      property: 'respectQwenIgnore',
-      getter: (c) => c.getFileFilteringRespectQwenIgnore(),
+      property: 'respectProtoIgnore',
+      getter: (c) => c.getFileFilteringRespectProtoIgnore(),
       value: true,
     },
     {
-      property: 'respectQwenIgnore',
-      getter: (c) => c.getFileFilteringRespectQwenIgnore(),
+      property: 'respectProtoIgnore',
+      getter: (c) => c.getFileFilteringRespectProtoIgnore(),
       value: false,
     },
     {

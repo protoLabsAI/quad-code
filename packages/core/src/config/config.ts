@@ -424,7 +424,7 @@ export interface ConfigParameters {
   usageStatisticsEnabled?: boolean;
   fileFiltering?: {
     respectGitIgnore?: boolean;
-    respectQwenIgnore?: boolean;
+    respectProtoIgnore?: boolean;
     enableRecursiveFileSearch?: boolean;
     enableFuzzySearch?: boolean;
   };
@@ -605,7 +605,7 @@ export class Config {
   private permissionBlockerService: PermissionBlockerService | null = null;
   private readonly fileFiltering: {
     respectGitIgnore: boolean;
-    respectQwenIgnore: boolean;
+    respectProtoIgnore: boolean;
     enableRecursiveFileSearch: boolean;
     enableFuzzySearch: boolean;
   };
@@ -743,7 +743,7 @@ export class Config {
 
     this.fileFiltering = {
       respectGitIgnore: params.fileFiltering?.respectGitIgnore ?? true,
-      respectQwenIgnore: params.fileFiltering?.respectQwenIgnore ?? true,
+      respectProtoIgnore: params.fileFiltering?.respectProtoIgnore ?? true,
       enableRecursiveFileSearch:
         params.fileFiltering?.enableRecursiveFileSearch ?? true,
       enableFuzzySearch: params.fileFiltering?.enableFuzzySearch ?? true,
@@ -1825,14 +1825,14 @@ export class Config {
   getFileFilteringRespectGitIgnore(): boolean {
     return this.fileFiltering.respectGitIgnore;
   }
-  getFileFilteringRespectQwenIgnore(): boolean {
-    return this.fileFiltering.respectQwenIgnore;
+  getFileFilteringRespectProtoIgnore(): boolean {
+    return this.fileFiltering.respectProtoIgnore;
   }
 
   getFileFilteringOptions(): FileFilteringOptions {
     return {
       respectGitIgnore: this.fileFiltering.respectGitIgnore,
-      respectQwenIgnore: this.fileFiltering.respectQwenIgnore,
+      respectProtoIgnore: this.fileFiltering.respectProtoIgnore,
     };
   }
 

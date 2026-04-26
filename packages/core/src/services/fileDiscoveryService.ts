@@ -5,26 +5,26 @@
  */
 
 import type { GitIgnoreFilter } from '../utils/gitIgnoreParser.js';
-import type { QwenIgnoreFilter } from '../utils/qwenIgnoreParser.js';
+import type { ProtoIgnoreFilter } from '../utils/protoIgnoreParser.js';
 import { GitIgnoreParser } from '../utils/gitIgnoreParser.js';
-import { QwenIgnoreParser } from '../utils/qwenIgnoreParser.js';
+import { ProtoIgnoreParser } from '../utils/protoIgnoreParser.js';
 import { isGitRepository } from '../utils/gitUtils.js';
 import * as path from 'node:path';
 
 export interface FilterFilesOptions {
   respectGitIgnore?: boolean;
-  respectQwenIgnore?: boolean;
+  respectProtoIgnore?: boolean;
 }
 
 export interface FilterReport {
   filteredPaths: string[];
   gitIgnoredCount: number;
-  qwenIgnoredCount: number;
+  protoIgnoredCount: number;
 }
 
 export class FileDiscoveryService {
   private gitIgnoreFilter: GitIgnoreFilter | null = null;
-  private qwenIgnoreFilter: QwenIgnoreFilter | null = null;
+  private protoIgnoreFilter: ProtoIgnoreFilter | null = null;
   private projectRoot: string;
 
   constructor(projectRoot: string) {
@@ -32,7 +32,7 @@ export class FileDiscoveryService {
     if (isGitRepository(this.projectRoot)) {
       this.gitIgnoreFilter = new GitIgnoreParser(this.projectRoot);
     }
-    this.qwenIgnoreFilter = new QwenIgnoreParser(this.projectRoot);
+    this.protoIgnoreFilter = new ProtoIgnoreParser(this.projectRoot);
   }
 
   /**
@@ -42,14 +42,14 @@ export class FileDiscoveryService {
     filePaths: string[],
     options: FilterFilesOptions = {
       respectGitIgnore: true,
-      respectQwenIgnore: true,
+      respectProtoIgnore: true,
     },
   ): string[] {
     return filePaths.filter((filePath) => {
       if (options.respectGitIgnore && this.shouldGitIgnoreFile(filePath)) {
         return false;
       }
-      if (options.respectQwenIgnore && this.shouldQwenIgnoreFile(filePath)) {
+      if (options.respectProtoIgnore && this.shouldProtoIgnoreFile(filePath)) {
         return false;
       }
       return true;
@@ -64,12 +64,12 @@ export class FileDiscoveryService {
     filePaths: string[],
     opts: FilterFilesOptions = {
       respectGitIgnore: true,
-      respectQwenIgnore: true,
+      respectProtoIgnore: true,
     },
   ): FilterReport {
     const filteredPaths: string[] = [];
     let gitIgnoredCount = 0;
-    let qwenIgnoredCount = 0;
+    let protoIgnoredCount = 0;
 
     for (const filePath of filePaths) {
       if (opts.respectGitIgnore && this.shouldGitIgnoreFile(filePath)) {
@@ -77,8 +77,8 @@ export class FileDiscoveryService {
         continue;
       }
 
-      if (opts.respectQwenIgnore && this.shouldQwenIgnoreFile(filePath)) {
-        qwenIgnoredCount++;
+      if (opts.respectProtoIgnore && this.shouldProtoIgnoreFile(filePath)) {
+        protoIgnoredCount++;
         continue;
       }
 
@@ -88,7 +88,7 @@ export class FileDiscoveryService {
     return {
       filteredPaths,
       gitIgnoredCount,
-      qwenIgnoredCount,
+      protoIgnoredCount,
     };
   }
 
@@ -103,11 +103,11 @@ export class FileDiscoveryService {
   }
 
   /**
-   * Checks if a single file should be qwen-ignored
+   * Checks if a single file should be proto-ignored
    */
-  shouldQwenIgnoreFile(filePath: string): boolean {
-    if (this.qwenIgnoreFilter) {
-      return this.qwenIgnoreFilter.isIgnored(filePath);
+  shouldProtoIgnoreFile(filePath: string): boolean {
+    if (this.protoIgnoreFilter) {
+      return this.protoIgnoreFilter.isIgnored(filePath);
     }
     return false;
   }
@@ -121,22 +121,22 @@ export class FileDiscoveryService {
   ): boolean {
     const {
       respectGitIgnore = true,
-      respectQwenIgnore: respectQwenIgnore = true,
+      respectProtoIgnore: respectProtoIgnore = true,
     } = options;
 
     if (respectGitIgnore && this.shouldGitIgnoreFile(filePath)) {
       return true;
     }
-    if (respectQwenIgnore && this.shouldQwenIgnoreFile(filePath)) {
+    if (respectProtoIgnore && this.shouldProtoIgnoreFile(filePath)) {
       return true;
     }
     return false;
   }
 
   /**
-   * Returns loaded patterns from .qwenignore
+   * Returns loaded patterns from .protoignore
    */
-  getQwenIgnorePatterns(): string[] {
-    return this.qwenIgnoreFilter?.getPatterns() ?? [];
+  getProtoIgnorePatterns(): string[] {
+    return this.protoIgnoreFilter?.getPatterns() ?? [];
   }
 }
