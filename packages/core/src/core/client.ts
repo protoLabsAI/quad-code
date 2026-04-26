@@ -31,6 +31,7 @@ import {
   getPlanModeSystemReminder,
   getSubagentSystemReminder,
 } from './prompts.js';
+import { buildBackgroundTaskNotification } from '../backgroundShells/notifications.js';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import {
   CompressionStatus,
@@ -818,6 +819,14 @@ export class GeminiClient {
         } catch {
           // Arena config not yet initialized — skip
         }
+      }
+
+      // add background-task completion notifications. Drained on read so
+      // each completed task is announced exactly once.
+      const bgRegistry = this.config.getBackgroundShellRegistry?.();
+      const bgPending = bgRegistry?.drainPendingNotifications() ?? [];
+      for (const task of bgPending) {
+        systemReminders.push(buildBackgroundTaskNotification(task));
       }
 
       requestToSent = [...systemReminders, ...requestToSent];
