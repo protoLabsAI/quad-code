@@ -91,28 +91,29 @@ type OpenAIContentPart =
   | OpenAIContentPartFile;
 
 /**
+ * Per-stream state for tool-call parsing and `<think>` tag accumulation.
+ * Created by `OpenAIContentConverter.createStreamContext()` at the start
+ * of each streaming response and passed into every
+ * `convertOpenAIChunkToGemini` call on that stream, so concurrent streams
+ * (parallel subagents, fork children, ACP concurrent Agent calls) never
+ * share parser state.
+ *
+ * Backport of upstream #3525 + extended to also scope `<think>` tag
+ * parsing state per-stream (Minimax/QwQ inline-XML reasoning).
+ */
+export interface ConverterStreamContext {
+  toolCallParser: StreamingToolCallParser;
+  thinkBuffer: string;
+  inThinkTag: boolean;
+}
+
+/**
  * Converter class for transforming data between Gemini and OpenAI formats
  */
 export class OpenAIContentConverter {
   private model: string;
   private schemaCompliance: SchemaComplianceMode;
   private modalities: InputModalities;
-  private streamingToolCallParser: StreamingToolCallParser =
-    new StreamingToolCallParser();
-
-  /**
-   * Stateful buffer for streaming `<think>` tag parsing.
-   *
-   * Some models (e.g. Minimax, QwQ) emit chain-of-thought as raw XML in the
-   * `content` field rather than via a dedicated `reasoning_content` field:
-   *
-   *   <think>reasoning here</think>actual answer
-   *
-   * Because tags may be split across multiple stream chunks we accumulate
-   * state here across calls to `convertOpenAIChunkToGemini`.
-   */
-  private _thinkBuffer = '';
-  private _inThinkTag = false;
 
   constructor(
     model: string,
@@ -140,14 +141,26 @@ export class OpenAIContentConverter {
   }
 
   /**
-   * Reset streaming tool calls parser for new stream processing
-   * This should be called at the beginning of each stream to prevent
-   * data pollution from previous incomplete streams
+   * Create fresh per-stream state for processing one OpenAI streaming
+   * response. The returned context is passed into every
+   * `convertOpenAIChunkToGemini` call for that stream, then discarded.
+   *
+   * Previously the tool-call parser and `<think>` parse state lived on
+   * the Converter instance and were shared by every caller of the
+   * singleton `Config.contentGenerator`. Concurrent streams (parallel
+   * subagents, fork children, ACP concurrent Agent calls per #3463)
+   * raced on that shared state: each stream's stream-start `reset()`
+   * wiped the other's partial tool-call buffers, chunks from different
+   * streams landed at the same `index=0` bucket, and
+   * `getCompletedToolCalls()` returned interleaved corrupt JSON that
+   * surfaced upstream as `NO_RESPONSE_TEXT` (issue #3516).
    */
-  resetStreamingToolCalls(): void {
-    this.streamingToolCallParser.reset();
-    this._thinkBuffer = '';
-    this._inThinkTag = false;
+  createStreamContext(): ConverterStreamContext {
+    return {
+      toolCallParser: new StreamingToolCallParser(),
+      thinkBuffer: '',
+      inThinkTag: false,
+    };
   }
 
   /**
@@ -176,19 +189,23 @@ export class OpenAIContentConverter {
    * Process a streaming text chunk that may contain partial or complete
    * `<think>` XML tags.
    *
-   * Mutates `this._thinkBuffer` / `this._inThinkTag` to track cross-chunk state.
+   * Mutates `ctx.thinkBuffer` / `ctx.inThinkTag` to track cross-chunk state
+   * for this specific stream.
    *
    * Returns `{ thoughtDelta, textDelta }` where either (or both) may be empty
    * strings when there is nothing to emit yet.
    */
-  private processThinkChunk(chunk: string): {
+  private processThinkChunk(
+    chunk: string,
+    ctx: ConverterStreamContext,
+  ): {
     thoughtDelta: string;
     textDelta: string;
   } {
     // Prepend any buffered partial opening tag from the previous chunk.
-    if (this._thinkBuffer) {
-      chunk = this._thinkBuffer + chunk;
-      this._thinkBuffer = '';
+    if (ctx.thinkBuffer) {
+      chunk = ctx.thinkBuffer + chunk;
+      ctx.thinkBuffer = '';
     }
 
     let thoughtDelta = '';
@@ -196,7 +213,7 @@ export class OpenAIContentConverter {
     let i = 0;
 
     while (i < chunk.length) {
-      if (this._inThinkTag) {
+      if (ctx.inThinkTag) {
         // We are inside a <think> block — scan for the closing tag.
         const closeIdx = chunk.indexOf('</think>', i);
         if (closeIdx === -1) {
@@ -206,7 +223,7 @@ export class OpenAIContentConverter {
         } else {
           // Found the closing tag.
           thoughtDelta += chunk.slice(i, closeIdx);
-          this._inThinkTag = false;
+          ctx.inThinkTag = false;
           i = closeIdx + '</think>'.length;
         }
       } else {
@@ -221,19 +238,19 @@ export class OpenAIContentConverter {
           if (partialOpen > 0) {
             // Buffer the possible partial tag; emit everything before it as text.
             textDelta += tail.slice(0, tail.length - partialOpen);
-            this._thinkBuffer = tail.slice(tail.length - partialOpen);
+            ctx.thinkBuffer = tail.slice(tail.length - partialOpen);
           } else {
             // Flush any buffered partial tag as text now that we know it wasn't
             // a real <think>.
-            textDelta += this._thinkBuffer + tail;
-            this._thinkBuffer = '';
+            textDelta += ctx.thinkBuffer + tail;
+            ctx.thinkBuffer = '';
           }
           i = chunk.length;
         } else {
           // Flush buffered partial + text before the tag.
-          textDelta += this._thinkBuffer + chunk.slice(i, openIdx);
-          this._thinkBuffer = '';
-          this._inThinkTag = true;
+          textDelta += ctx.thinkBuffer + chunk.slice(i, openIdx);
+          ctx.thinkBuffer = '';
+          ctx.inThinkTag = true;
           i = openIdx + '<think>'.length;
         }
       }
@@ -1081,10 +1098,17 @@ export class OpenAIContentConverter {
   }
 
   /**
-   * Convert OpenAI stream chunk to Gemini format
+   * Convert OpenAI stream chunk to Gemini format.
+   *
+   * `ctx` carries the tool-call parser and `<think>`-tag state for this
+   * stream. Callers MUST obtain it from `createStreamContext()` at the
+   * start of the stream and pass the same instance for every chunk of
+   * that stream. Concurrent streams MUST use distinct contexts or their
+   * tool-call buffers will interleave (issue #3516).
    */
   convertOpenAIChunkToGemini(
     chunk: OpenAI.Chat.ChatCompletionChunk,
+    ctx: ConverterStreamContext,
   ): GenerateContentResponse {
     const choice = chunk.choices?.[0];
     const response = new GenerateContentResponse();
@@ -1106,6 +1130,7 @@ export class OpenAIContentConverter {
         if (typeof choice.delta.content === 'string') {
           const { thoughtDelta, textDelta } = this.processThinkChunk(
             choice.delta.content,
+            ctx,
           );
           // Only emit a thought part when there is no dedicated reasoning field
           // (avoid double-counting when a model provides both).
@@ -1118,14 +1143,14 @@ export class OpenAIContentConverter {
         }
       }
 
-      // Handle tool calls using the streaming parser
+      // Handle tool calls using the stream-local parser
       if (choice.delta?.tool_calls) {
         for (const toolCall of choice.delta.tool_calls) {
           const index = toolCall.index ?? 0;
 
           // Process the tool call chunk through the streaming parser
           if (toolCall.function?.arguments) {
-            this.streamingToolCallParser.addChunk(
+            ctx.toolCallParser.addChunk(
               index,
               toolCall.function.arguments,
               toolCall.id,
@@ -1133,7 +1158,7 @@ export class OpenAIContentConverter {
             );
           } else {
             // Handle metadata-only chunks (id and/or name without arguments)
-            this.streamingToolCallParser.addChunk(
+            ctx.toolCallParser.addChunk(
               index,
               '', // Empty chunk for metadata-only updates
               toolCall.id,
@@ -1149,11 +1174,9 @@ export class OpenAIContentConverter {
         // Detect truncation the provider may not report correctly.
         // Some providers (e.g. DashScope/Qwen) send "stop" or "tool_calls"
         // even when output was cut off mid-JSON due to max_tokens.
-        toolCallsTruncated =
-          this.streamingToolCallParser.hasIncompleteToolCalls();
+        toolCallsTruncated = ctx.toolCallParser.hasIncompleteToolCalls();
 
-        const completedToolCalls =
-          this.streamingToolCallParser.getCompletedToolCalls();
+        const completedToolCalls = ctx.toolCallParser.getCompletedToolCalls();
 
         for (const toolCall of completedToolCalls) {
           if (!toolCall.name) continue;
@@ -1183,8 +1206,9 @@ export class OpenAIContentConverter {
           });
         }
 
-        // Clear the parser for the next stream
-        this.streamingToolCallParser.reset();
+        // Parser is stream-local; it will be discarded with the
+        // ConverterStreamContext when the stream finishes. No manual
+        // reset needed.
       }
 
       // If tool call JSON was truncated, override to "length" so downstream

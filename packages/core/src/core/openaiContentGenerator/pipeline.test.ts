@@ -52,7 +52,11 @@ describe('ContentGenerationPipeline', () => {
       convertOpenAIResponseToGemini: vi.fn(),
       convertOpenAIChunkToGemini: vi.fn(),
       convertGeminiToolsToOpenAI: vi.fn(),
-      resetStreamingToolCalls: vi.fn(),
+      createStreamContext: vi.fn().mockReturnValue({
+        toolCallParser: { addChunk: vi.fn(), getCompletedToolCalls: vi.fn() },
+        thinkBuffer: '',
+        inThinkTag: false,
+      }),
     } as unknown as OpenAIContentConverter;
 
     // Mock provider
@@ -392,7 +396,7 @@ describe('ContentGenerationPipeline', () => {
       expect(results).toHaveLength(2);
       expect(results[0]).toBe(mockGeminiResponse1);
       expect(results[1]).toBe(mockGeminiResponse2);
-      expect(mockConverter.resetStreamingToolCalls).toHaveBeenCalled();
+      expect(mockConverter.createStreamContext).toHaveBeenCalled();
       expect(mockClient.chat.completions.create).toHaveBeenCalledWith(
         expect.objectContaining({
           stream: true,
@@ -504,7 +508,9 @@ describe('ContentGenerationPipeline', () => {
       }
 
       expect(results).toHaveLength(0); // No results due to error
-      expect(mockConverter.resetStreamingToolCalls).toHaveBeenCalledTimes(2); // Once at start, once on error
+      // Per-stream context is created once per stream entry; no manual reset
+      // on error path anymore (parser is GC'd with the context).
+      expect(mockConverter.createStreamContext).toHaveBeenCalledTimes(1);
       expect(mockErrorHandler.handle).toHaveBeenCalledWith(
         testError,
         expect.any(Object),
