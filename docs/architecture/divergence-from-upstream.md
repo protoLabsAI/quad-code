@@ -263,6 +263,18 @@ Consumed by:
   `task-output.ts`, `task-ready.ts`, `task-stop.ts`, `task-update.ts`
   (backed by `services/task-store.ts`). Distinct from the AskUserQuestion
   / TodoWrite split — these track long-running async work.
+- **Background-shell disk capture + `bg_stop`** — `backgroundShells/`
+  module + `tools/bg-stop.ts`. When a shell command runs with
+  `is_background: true`, stdout/stderr is redirected at the shell level
+  to `<projectTempDir>/<sessionId>/tasks/<taskId>.output`. The OS keeps
+  writing even after the wrapper exits, so detached processes (long
+  evals, build watchers, dev servers) never silently lose output.
+  `BackgroundShellRegistry` tracks each task; a watcher polls the `.exit`
+  sentinel and marks it complete. The next user turn carries a
+  `<task_notification>` block (`task_id`, `output_file`, `status`,
+  `exit_code`). `bg_stop` SIGTERMs the process group with SIGKILL
+  fallback. Listed via `/bg`. Mirrors cc-2.18's task framework, scoped
+  to local shells only. **Non-Windows.**
 - **LSP** — `tools/lsp.ts` exposing language-server intelligence; a
   fork-only setting (`general.lsp`) gates it.
 

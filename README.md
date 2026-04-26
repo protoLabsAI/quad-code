@@ -268,6 +268,17 @@ br create --title "Fix auth bug" --type task --priority 1
 br close <id> --reason "Fixed in commit abc123"
 ```
 
+## Long-running Background Shells
+
+proto captures the output of shell commands run with `is_background: true` to disk so detached processes never silently lose their stdout. The agent gets a stable task ID and an absolute output file path it can read at any time, plus an automatic `<task_notification>` on the next turn when the task exits.
+
+- **Output file:** `<projectTempDir>/<sessionId>/tasks/<taskId>.output` — written by the OS via shell-level redirection, so it keeps growing even after the parent wrapper exits.
+- **Completion:** when the bg process exits, the next user prompt is prefixed with a `<task_notification>` block carrying `task_id`, `output_file`, `status` (completed/failed/killed), and `exit_code`. The agent can then `read_file` the output for results.
+- **`/bg`** lists running and recently-completed background tasks.
+- **`bg_stop` tool** — sends SIGTERM to the process group, escalating to SIGKILL after a 3s grace.
+
+This is what fixes the "agent runs an eval, can't find the results" failure mode that plagued earlier versions where backgrounded `&` commands streamed into nowhere.
+
 ## Memory
 
 proto has a persistent memory system inspired by Claude Code. Memories are individual markdown files with YAML frontmatter, organized by type and stored per-project or globally.
