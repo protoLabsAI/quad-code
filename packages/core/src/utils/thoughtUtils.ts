@@ -5,6 +5,7 @@
  */
 
 import type { GenerateContentResponse } from '@google/genai';
+import { isInternalPart } from './partUtils.js';
 
 export type ThoughtSummary = {
   subject: string;
@@ -67,7 +68,7 @@ export function getThoughtText(
       candidate.content.parts.length > 0
     ) {
       return candidate.content.parts
-        .filter((part) => part.thought)
+        .filter((part) => part.thought && !isInternalPart(part))
         .map((part) => part.text ?? '')
         .join('');
     }

@@ -8,12 +8,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import ignore from 'ignore';
 
-export interface QwenIgnoreFilter {
+export interface ProtoIgnoreFilter {
   isIgnored(filePath: string): boolean;
   getPatterns(): string[];
 }
 
-export class QwenIgnoreParser implements QwenIgnoreFilter {
+export class ProtoIgnoreParser implements ProtoIgnoreFilter {
   private projectRoot: string;
   private patterns: string[] = [];
   private ig = ignore();
@@ -24,20 +24,33 @@ export class QwenIgnoreParser implements QwenIgnoreFilter {
   }
 
   private loadPatterns(): void {
-    const patternsFilePath = path.join(this.projectRoot, '.qwenignore');
-    let content: string;
-    try {
-      content = fs.readFileSync(patternsFilePath, 'utf-8');
-    } catch (_error) {
-      // ignore file not found
+    // Load .protoignore (primary) and inherit patterns from .claudeignore
+    // when present, so projects already configured for Claude Code don't
+    // need a duplicate file. Order is .claudeignore first, .protoignore
+    // second — later patterns override earlier ones (gitignore semantics).
+    const sources = ['.claudeignore', '.protoignore'];
+    const merged: string[] = [];
+
+    for (const filename of sources) {
+      const patternsFilePath = path.join(this.projectRoot, filename);
+      let content: string;
+      try {
+        content = fs.readFileSync(patternsFilePath, 'utf-8');
+      } catch (_error) {
+        continue;
+      }
+      const lines = (content ?? '')
+        .split('\n')
+        .map((p) => p.trim())
+        .filter((p) => p !== '' && !p.startsWith('#'));
+      merged.push(...lines);
+    }
+
+    if (merged.length === 0) {
       return;
     }
 
-    this.patterns = (content ?? '')
-      .split('\n')
-      .map((p) => p.trim())
-      .filter((p) => p !== '' && !p.startsWith('#'));
-
+    this.patterns = merged;
     this.ig.add(this.patterns);
   }
 

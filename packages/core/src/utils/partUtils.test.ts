@@ -10,11 +10,17 @@ import {
   getResponseText,
   flatMapTextParts,
   appendToLastTextPart,
+  isInternalPart,
 } from './partUtils.js';
 import type { GenerateContentResponse, Part, PartUnion } from '@google/genai';
 
 const mockResponse = (
-  parts?: Array<{ text?: string; functionCall?: unknown }>,
+  parts?: Array<{
+    text?: string;
+    functionCall?: unknown;
+    thought?: boolean;
+    protoInternal?: boolean;
+  }>,
 ): GenerateContentResponse => ({
   candidates: parts
     ? [{ content: { parts: parts as Part[], role: 'model' }, index: 0 }]
@@ -183,6 +189,25 @@ describe('partUtils', () => {
         codeExecutionResult: undefined,
       };
       expect(getResponseText(response)).toBeNull();
+    });
+
+    it('should skip parts marked protoInternal so the UI never sees them', () => {
+      const result = mockResponse([
+        { text: 'visible' },
+        { text: '[tool_call dropped: ...]', protoInternal: true },
+      ]);
+      expect(getResponseText(result)).toBe('visible');
+    });
+  });
+
+  describe('isInternalPart', () => {
+    it('returns true only for parts with protoInternal: true', () => {
+      expect(isInternalPart({ text: 'x', protoInternal: true })).toBe(true);
+      expect(isInternalPart({ text: 'x' })).toBe(false);
+      expect(isInternalPart({ text: 'x', protoInternal: false })).toBe(false);
+      expect(isInternalPart(null)).toBe(false);
+      expect(isInternalPart(undefined)).toBe(false);
+      expect(isInternalPart('string')).toBe(false);
     });
   });
 

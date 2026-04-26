@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Qwen
+ * Copyright 2025 Proto
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -115,8 +115,8 @@ export default {
   // ============================================================================
   // Commands - General
   // ============================================================================
-  'Analyzes the project and creates a tailored QWEN.md file.':
-    'Analyzes the project and creates a tailored QWEN.md file.',
+  'Analyzes the project and creates a tailored PROTO.md file.':
+    'Analyzes the project and creates a tailored PROTO.md file.',
   'List available proto tools. Usage: /tools [desc]':
     'List available proto tools. Usage: /tools [desc]',
   'List available skills.': 'List available skills.',
@@ -211,8 +211,8 @@ export default {
   // ============================================================================
   // Agents - Creation Wizard
   // ============================================================================
-  'Project Level (.qwen/agents/)': 'Project Level (.qwen/agents/)',
-  'User Level (~/.qwen/agents/)': 'User Level (~/.qwen/agents/)',
+  'Project Level (.proto/agents/)': 'Project Level (.proto/agents/)',
+  'User Level (~/.proto/agents/)': 'User Level (~/.proto/agents/)',
   '✅ Subagent Created Successfully!': '✅ Subagent Created Successfully!',
   'Subagent "{{name}}" has been saved to {{level}} level.':
     'Subagent "{{name}}" has been saved to {{level}} level.',
@@ -390,8 +390,8 @@ export default {
   'Custom Witty Phrases': 'Custom Witty Phrases',
   'Show Welcome Back Dialog': 'Show Welcome Back Dialog',
   'Enable User Feedback': 'Enable User Feedback',
-  'How is Qwen doing this session? (optional)':
-    'How is Qwen doing this session? (optional)',
+  'How is Proto doing this session? (optional)':
+    'How is Proto doing this session? (optional)',
   Bad: 'Bad',
   Fine: 'Fine',
   Good: 'Good',
@@ -414,7 +414,7 @@ export default {
   'Load Memory From Include Directories':
     'Load Memory From Include Directories',
   'Respect .gitignore': 'Respect .gitignore',
-  'Respect .qwenignore': 'Respect .qwenignore',
+  'Respect .protoignore': 'Respect .protoignore',
   'Enable Recursive File Search': 'Enable Recursive File Search',
   'Disable Fuzzy Search': 'Disable Fuzzy Search',
   'Interactive Shell (PTY)': 'Interactive Shell (PTY)',
@@ -508,8 +508,8 @@ export default {
   remote: 'remote',
   'This extension will add the following commands: {{commands}}.':
     'This extension will add the following commands: {{commands}}.',
-  'This extension will append info to your QWEN.md context using {{fileName}}':
-    'This extension will append info to your QWEN.md context using {{fileName}}',
+  'This extension will append info to your PROTO.md context using {{fileName}}':
+    'This extension will append info to your PROTO.md context using {{fileName}}',
   'This extension will exclude the following core tools: {{tools}}':
     'This extension will exclude the following core tools: {{tools}}',
   'This extension will install the following skills:':
@@ -685,8 +685,8 @@ export default {
   'Exit codes:': 'Exit codes:',
   'Configured hooks:': 'Configured hooks:',
   'No hooks configured for this event.': 'No hooks configured for this event.',
-  'To add hooks, edit settings.json directly or ask Qwen.':
-    'To add hooks, edit settings.json directly or ask Qwen.',
+  'To add hooks, edit settings.json directly or ask Proto.':
+    'To add hooks, edit settings.json directly or ask Proto.',
   'Enter to select · Esc to go back': 'Enter to select · Esc to go back',
   // Hooks - Config Detail Step
   'Hook details': 'Hook details',
@@ -694,8 +694,8 @@ export default {
   'Extension:': 'Extension:',
   'Desc:': 'Desc:',
   'No hook config selected': 'No hook config selected',
-  'To modify or remove this hook, edit settings.json directly or ask Qwen to help.':
-    'To modify or remove this hook, edit settings.json directly or ask Qwen to help.',
+  'To modify or remove this hook, edit settings.json directly or ask Proto to help.':
+    'To modify or remove this hook, edit settings.json directly or ask Proto to help.',
   // Hooks - Disabled Step
   'Hook Configuration - Disabled': 'Hook Configuration - Disabled',
   'All hooks are currently disabled. You have {{count}} that are not running.':
@@ -707,8 +707,8 @@ export default {
   'StatusLine will not be displayed': 'StatusLine will not be displayed',
   'Tool operations will proceed without hook validation':
     'Tool operations will proceed without hook validation',
-  'To re-enable hooks, remove "disableAllHooks" from settings.json or ask Qwen Code.':
-    'To re-enable hooks, remove "disableAllHooks" from settings.json or ask Qwen Code.',
+  'To re-enable hooks, remove "disableAllHooks" from settings.json or ask Proto Code.':
+    'To re-enable hooks, remove "disableAllHooks" from settings.json or ask Proto Code.',
   // Hooks - Source
   Project: 'Project',
   User: 'User',
@@ -773,7 +773,7 @@ export default {
     'show stderr to user only but continue with tool call',
   'block processing, erase original prompt, and show stderr to user only':
     'block processing, erase original prompt, and show stderr to user only',
-  'stdout shown to Qwen': 'stdout shown to Qwen',
+  'stdout shown to Proto': 'stdout shown to Proto',
   'show stderr to user only (blocking errors ignored)':
     'show stderr to user only (blocking errors ignored)',
   'command completes successfully': 'command completes successfully',
@@ -1032,7 +1032,7 @@ export default {
   servers: 'servers',
   'Add MCP servers to your settings to get started.':
     'Add MCP servers to your settings to get started.',
-  'Run qwen --debug to see error logs': 'Run qwen --debug to see error logs',
+  'Run proto --debug to see error logs': 'Run proto --debug to see error logs',
 
   // MCP OAuth Authentication
   'OAuth Authentication': 'OAuth Authentication',
@@ -1127,8 +1127,8 @@ export default {
   // ============================================================================
   // Commands - Summary
   // ============================================================================
-  'Generate a project summary and save it to .qwen/PROJECT_SUMMARY.md':
-    'Generate a project summary and save it to .qwen/PROJECT_SUMMARY.md',
+  'Generate a project summary and save it to .proto/PROJECT_SUMMARY.md':
+    'Generate a project summary and save it to .proto/PROJECT_SUMMARY.md',
   'No chat client available to generate summary.':
     'No chat client available to generate summary.',
   'Already generating summary, wait for previous request to complete':
@@ -1190,8 +1190,8 @@ export default {
   'The /directory add command is not supported in restrictive sandbox profiles. Please use --include-directories when starting the session instead.':
     'The /directory add command is not supported in restrictive sandbox profiles. Please use --include-directories when starting the session instead.',
   "Error adding '{{path}}': {{error}}": "Error adding '{{path}}': {{error}}",
-  'Successfully added QWEN.md files from the following directories if there are:\n- {{directories}}':
-    'Successfully added QWEN.md files from the following directories if there are:\n- {{directories}}',
+  'Successfully added PROTO.md files from the following directories if there are:\n- {{directories}}':
+    'Successfully added PROTO.md files from the following directories if there are:\n- {{directories}}',
   'Error refreshing memory: {{error}}': 'Error refreshing memory: {{error}}',
   'Successfully added directories:\n- {{directories}}':
     'Successfully added directories:\n- {{directories}}',
@@ -1288,9 +1288,9 @@ export default {
     'You must select an auth method to proceed. Press Ctrl+C again to exit.',
   'Terms of Services and Privacy Notice':
     'Terms of Services and Privacy Notice',
-  'Qwen OAuth': 'Qwen OAuth',
-  'Free \u00B7 Up to 1,000 requests/day \u00B7 Qwen latest models':
-    'Free \u00B7 Up to 1,000 requests/day \u00B7 Qwen latest models',
+  'Proto OAuth': 'Proto OAuth',
+  'Free \u00B7 Up to 1,000 requests/day \u00B7 Proto latest models':
+    'Free \u00B7 Up to 1,000 requests/day \u00B7 Proto latest models',
   'Login with QwenChat account to use daily free quota.':
     'Login with QwenChat account to use daily free quota.',
   'Paid \u00B7 Up to 6,000 requests/5 hrs \u00B7 All Alibaba Cloud Coding Plan Models':
@@ -1305,27 +1305,27 @@ export default {
     'Failed to login. Message: {{message}}',
   'Authentication is enforced to be {{enforcedType}}, but you are currently using {{currentType}}.':
     'Authentication is enforced to be {{enforcedType}}, but you are currently using {{currentType}}.',
-  'Qwen OAuth authentication timed out. Please try again.':
-    'Qwen OAuth authentication timed out. Please try again.',
-  'Qwen OAuth authentication cancelled.':
-    'Qwen OAuth authentication cancelled.',
-  'Qwen OAuth Authentication': 'Qwen OAuth Authentication',
+  'Proto OAuth authentication timed out. Please try again.':
+    'Proto OAuth authentication timed out. Please try again.',
+  'Proto OAuth authentication cancelled.':
+    'Proto OAuth authentication cancelled.',
+  'Proto OAuth Authentication': 'Proto OAuth Authentication',
   'Please visit this URL to authorize:': 'Please visit this URL to authorize:',
   'Or scan the QR code below:': 'Or scan the QR code below:',
   'Waiting for authorization': 'Waiting for authorization',
   'Time remaining:': 'Time remaining:',
   '(Press ESC or CTRL+C to cancel)': '(Press ESC or CTRL+C to cancel)',
-  'Qwen OAuth Authentication Timeout': 'Qwen OAuth Authentication Timeout',
+  'Proto OAuth Authentication Timeout': 'Proto OAuth Authentication Timeout',
   'OAuth token expired (over {{seconds}} seconds). Please select authentication method again.':
     'OAuth token expired (over {{seconds}} seconds). Please select authentication method again.',
   'Press any key to return to authentication type selection.':
     'Press any key to return to authentication type selection.',
-  'Waiting for Qwen OAuth authentication...':
-    'Waiting for Qwen OAuth authentication...',
-  'Note: Your existing API key in settings.json will not be cleared when using Qwen OAuth. You can switch back to OpenAI authentication later if needed.':
-    'Note: Your existing API key in settings.json will not be cleared when using Qwen OAuth. You can switch back to OpenAI authentication later if needed.',
-  'Note: Your existing API key will not be cleared when using Qwen OAuth.':
-    'Note: Your existing API key will not be cleared when using Qwen OAuth.',
+  'Waiting for Proto OAuth authentication...':
+    'Waiting for Proto OAuth authentication...',
+  'Note: Your existing API key in settings.json will not be cleared when using Proto OAuth. You can switch back to OpenAI authentication later if needed.':
+    'Note: Your existing API key in settings.json will not be cleared when using Proto OAuth. You can switch back to OpenAI authentication later if needed.',
+  'Note: Your existing API key will not be cleared when using Proto OAuth.':
+    'Note: Your existing API key will not be cleared when using Proto OAuth.',
   'Authentication timed out. Please try again.':
     'Authentication timed out. Please try again.',
   'Waiting for auth... (Press ESC or CTRL+C to cancel)':
@@ -1386,10 +1386,10 @@ export default {
   unknown: 'unknown',
   "Failed to switch model to '{{modelId}}'.\n\n{{error}}":
     "Failed to switch model to '{{modelId}}'.\n\n{{error}}",
-  'Qwen 3.5 Plus — efficient hybrid model with leading coding performance':
-    'Qwen 3.5 Plus — efficient hybrid model with leading coding performance',
-  'The latest Qwen Vision model from Alibaba Cloud ModelStudio (version: qwen3-vl-plus-2025-09-23)':
-    'The latest Qwen Vision model from Alibaba Cloud ModelStudio (version: qwen3-vl-plus-2025-09-23)',
+  'Proto 3.5 Plus — efficient hybrid model with leading coding performance':
+    'Proto 3.5 Plus — efficient hybrid model with leading coding performance',
+  'The latest Proto Vision model from Alibaba Cloud ModelStudio (version: qwen3-vl-plus-2025-09-23)':
+    'The latest Proto Vision model from Alibaba Cloud ModelStudio (version: qwen3-vl-plus-2025-09-23)',
 
   // ============================================================================
   // Dialogs - Permissions
@@ -1415,11 +1415,11 @@ export default {
   'From project settings': 'From project settings',
   'From session': 'From session',
   'Project settings (local)': 'Project settings (local)',
-  'Saved in .qwen/settings.local.json': 'Saved in .qwen/settings.local.json',
+  'Saved in .proto/settings.local.json': 'Saved in .proto/settings.local.json',
   'Project settings': 'Project settings',
-  'Checked in at .qwen/settings.json': 'Checked in at .qwen/settings.json',
+  'Checked in at .proto/settings.json': 'Checked in at .proto/settings.json',
   'User settings': 'User settings',
-  'Saved in at ~/.qwen/settings.json': 'Saved in at ~/.qwen/settings.json',
+  'Saved in at ~/.proto/settings.json': 'Saved in at ~/.proto/settings.json',
   'Add a new rule…': 'Add a new rule…',
   'Add {{type}} permission rule': 'Add {{type}} permission rule',
   'Permission rules are a tool name, optionally followed by a specifier in parentheses.':
@@ -1539,8 +1539,8 @@ export default {
     'You can run any shell commands from proto using ! (e.g. !ls).',
   'Type / to open the command popup; Tab autocompletes slash commands and saved prompts.':
     'Type / to open the command popup; Tab autocompletes slash commands and saved prompts.',
-  'You can resume a previous conversation by running qwen --continue or qwen --resume.':
-    'You can resume a previous conversation by running qwen --continue or qwen --resume.',
+  'You can resume a previous conversation by running proto --continue or proto --resume.':
+    'You can resume a previous conversation by running proto --continue or proto --resume.',
   'You can switch permission mode quickly with Shift+Tab or /approval-mode.':
     'You can switch permission mode quickly with Shift+Tab or /approval-mode.',
   'You can switch permission mode quickly with Tab or /approval-mode.':
@@ -1934,9 +1934,9 @@ export default {
   // ============================================================================
   // Commands - Auth
   // ============================================================================
-  'Configure Qwen authentication information with Qwen-OAuth or Alibaba Cloud Coding Plan':
-    'Configure Qwen authentication information with Qwen-OAuth or Alibaba Cloud Coding Plan',
-  'Authenticate using Qwen OAuth': 'Authenticate using Qwen OAuth',
+  'Configure Proto authentication information with Proto-OAuth or Alibaba Cloud Coding Plan':
+    'Configure Proto authentication information with Proto-OAuth or Alibaba Cloud Coding Plan',
+  'Authenticate using Proto OAuth': 'Authenticate using Proto OAuth',
   'Authenticate using Alibaba Cloud Coding Plan':
     'Authenticate using Alibaba Cloud Coding Plan',
   'Region for Coding Plan (china/global)':
@@ -1945,12 +1945,12 @@ export default {
   'Show current authentication status': 'Show current authentication status',
   'Authentication completed successfully.':
     'Authentication completed successfully.',
-  'Starting Qwen OAuth authentication...':
-    'Starting Qwen OAuth authentication...',
-  'Successfully authenticated with Qwen OAuth.':
-    'Successfully authenticated with Qwen OAuth.',
-  'Failed to authenticate with Qwen OAuth: {{error}}':
-    'Failed to authenticate with Qwen OAuth: {{error}}',
+  'Starting Proto OAuth authentication...':
+    'Starting Proto OAuth authentication...',
+  'Successfully authenticated with Proto OAuth.':
+    'Successfully authenticated with Proto OAuth.',
+  'Failed to authenticate with Proto OAuth: {{error}}':
+    'Failed to authenticate with Proto OAuth: {{error}}',
   'Processing Alibaba Cloud Coding Plan authentication...':
     'Processing Alibaba Cloud Coding Plan authentication...',
   'Successfully authenticated with Alibaba Cloud Coding Plan.':
@@ -1969,17 +1969,18 @@ export default {
     '⚠️  No authentication method configured.\n',
   'Run one of the following commands to get started:\n':
     'Run one of the following commands to get started:\n',
-  '  qwen auth qwen-oauth     - Authenticate with Qwen OAuth (free tier)':
-    '  qwen auth qwen-oauth     - Authenticate with Qwen OAuth (free tier)',
-  '  qwen auth coding-plan      - Authenticate with Alibaba Cloud Coding Plan\n':
-    '  qwen auth coding-plan      - Authenticate with Alibaba Cloud Coding Plan\n',
+  '  proto auth proto-oauth     - Authenticate with Proto OAuth (free tier)':
+    '  proto auth proto-oauth     - Authenticate with Proto OAuth (free tier)',
+  '  proto auth coding-plan      - Authenticate with Alibaba Cloud Coding Plan\n':
+    '  proto auth coding-plan      - Authenticate with Alibaba Cloud Coding Plan\n',
   'Or simply run:': 'Or simply run:',
-  '  qwen auth                - Interactive authentication setup\n':
-    '  qwen auth                - Interactive authentication setup\n',
-  '✓ Authentication Method: Qwen OAuth': '✓ Authentication Method: Qwen OAuth',
+  '  proto auth                - Interactive authentication setup\n':
+    '  proto auth                - Interactive authentication setup\n',
+  '✓ Authentication Method: Proto OAuth':
+    '✓ Authentication Method: Proto OAuth',
   '  Type: Free tier': '  Type: Free tier',
   '  Limit: Up to 1,000 requests/day': '  Limit: Up to 1,000 requests/day',
-  '  Models: Qwen latest models\n': '  Models: Qwen latest models\n',
+  '  Models: Proto latest models\n': '  Models: Proto latest models\n',
   '✓ Authentication Method: Alibaba Cloud Coding Plan':
     '✓ Authentication Method: Alibaba Cloud Coding Plan',
   '中国 (China) - 阿里云百炼': '中国 (China) - 阿里云百炼',
@@ -1992,8 +1993,8 @@ export default {
     '⚠️  Authentication Method: Alibaba Cloud Coding Plan (Incomplete)',
   '  Issue: API key not found in environment or settings\n':
     '  Issue: API key not found in environment or settings\n',
-  '  Run `qwen auth coding-plan` to re-configure.\n':
-    '  Run `qwen auth coding-plan` to re-configure.\n',
+  '  Run `proto auth coding-plan` to re-configure.\n':
+    '  Run `proto auth coding-plan` to re-configure.\n',
   '✓ Authentication Method: {{type}}': '✓ Authentication Method: {{type}}',
   '  Status: Configured\n': '  Status: Configured\n',
   'Failed to check authentication status: {{error}}':
