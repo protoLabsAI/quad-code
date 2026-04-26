@@ -43,6 +43,7 @@ import { ContextUsage } from './views/ContextUsage.js';
 import { ArenaAgentCard, ArenaSessionCard } from './arena/ArenaCards.js';
 import { InsightProgressMessage } from './messages/InsightProgressMessage.js';
 import { BtwMessage } from './messages/BtwMessage.js';
+import { RecapMessage } from './messages/RecapMessage.js';
 
 interface HistoryItemDisplayProps {
   item: HistoryItem;
@@ -229,6 +230,9 @@ const HistoryItemDisplayComponent: React.FC<HistoryItemDisplayProps> = ({
       )}
       {itemForDisplay.type === 'btw' && itemForDisplay.btw && (
         <BtwMessage btw={itemForDisplay.btw} />
+      )}
+      {itemForDisplay.type === 'recap' && (
+        <RecapMessage text={itemForDisplay.text} />
       )}
     </Box>
   );
