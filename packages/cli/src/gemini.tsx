@@ -115,6 +115,8 @@ function getNodeMemoryArgs(isDebugMode: boolean): string[] {
 
 import { loadSandboxConfig } from './config/sandboxConfig.js';
 import { runAcpAgent } from './acp-integration/acpAgent.js';
+import { installTerminalRedrawOptimizer } from './ui/utils/terminalRedrawOptimizer.js';
+import { installSynchronizedOutput } from './ui/utils/synchronizedOutput.js';
 
 export function setupUnhandledRejectionHandler() {
   let unhandledRejectionOccurred = false;
@@ -146,6 +148,22 @@ export async function startInteractiveUI(
   initializationResult: InitializationResult,
 ) {
   const version = await getCliVersion();
+
+  // Reduce TUI flicker:
+  //   - terminalRedrawOptimizer collapses Ink's per-line erase+cursor-up
+  //     sequences into a single bounded erase, eliminating scrollback bounce.
+  //   - synchronizedOutput wraps each render frame in BSU/ESU escape codes
+  //     on supporting terminals (Kitty, WezTerm, iTerm) so the frame is
+  //     committed atomically.
+  // Both no-op on non-TTY / screen-reader / unsupported terminals.
+  const restoreTerminalRedrawOptimizer =
+    process.stdout.isTTY && !config.getScreenReader()
+      ? installTerminalRedrawOptimizer(process.stdout)
+      : () => {};
+  const restoreSynchronizedOutput =
+    process.stdout.isTTY && !config.getScreenReader()
+      ? installSynchronizedOutput(process.stdout)
+      : () => {};
 
   // Create wrapper component to use hooks inside render
   const AppWrapper = () => {
@@ -210,7 +228,11 @@ export async function startInteractiveUI(
       });
   }
 
-  registerCleanup(() => instance.unmount());
+  registerCleanup(() => {
+    instance.unmount();
+    restoreSynchronizedOutput();
+    restoreTerminalRedrawOptimizer();
+  });
 }
 
 export async function main() {
