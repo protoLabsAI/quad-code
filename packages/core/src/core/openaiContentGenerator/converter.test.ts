@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { OpenAIContentConverter } from './converter.js';
-import type { StreamingToolCallParser } from './streamingToolCallParser.js';
+import { StreamingToolCallParser } from './streamingToolCallParser.js';
 import {
   Type,
   FinishReason,
@@ -31,57 +31,33 @@ describe('OpenAIContentConverter', () => {
     });
   });
 
-  describe('resetStreamingToolCalls', () => {
-    it('should clear streaming tool calls accumulator', () => {
-      // Access private field for testing
-      const parser = (
-        converter as unknown as {
-          streamingToolCallParser: StreamingToolCallParser;
-        }
-      ).streamingToolCallParser;
+  describe('createStreamContext', () => {
+    it('returns a fresh context with its own StreamingToolCallParser', () => {
+      const ctx1 = converter.createStreamContext();
+      const ctx2 = converter.createStreamContext();
 
-      // Add some test data to the parser
-      parser.addChunk(0, '{"arg": "value"}', 'test-id', 'test-function');
-      parser.addChunk(1, '{"arg2": "value2"}', 'test-id-2', 'test-function-2');
-
-      // Verify data is present
-      expect(parser.getBuffer(0)).toBe('{"arg": "value"}');
-      expect(parser.getBuffer(1)).toBe('{"arg2": "value2"}');
-
-      // Call reset method
-      converter.resetStreamingToolCalls();
-
-      // Verify data is cleared
-      expect(parser.getBuffer(0)).toBe('');
-      expect(parser.getBuffer(1)).toBe('');
+      expect(ctx1.toolCallParser).toBeInstanceOf(StreamingToolCallParser);
+      expect(ctx2.toolCallParser).toBeInstanceOf(StreamingToolCallParser);
+      expect(ctx1.toolCallParser).not.toBe(ctx2.toolCallParser);
+      expect(ctx1.thinkBuffer).toBe('');
+      expect(ctx1.inThinkTag).toBe(false);
     });
 
-    it('should be safe to call multiple times', () => {
-      // Call reset multiple times
-      converter.resetStreamingToolCalls();
-      converter.resetStreamingToolCalls();
-      converter.resetStreamingToolCalls();
+    it('isolates two contexts so writes to one do not leak into the other', () => {
+      // Regression for issue #3516: previously the parser lived on the
+      // Converter as an instance field, so two concurrent streams sharing
+      // the same Config.contentGenerator would overwrite each other's
+      // tool-call buffers. Per-stream contexts eliminate that contention.
+      const ctx1 = converter.createStreamContext();
+      const ctx2 = converter.createStreamContext();
 
-      // Should not throw any errors
-      const parser = (
-        converter as unknown as {
-          streamingToolCallParser: StreamingToolCallParser;
-        }
-      ).streamingToolCallParser;
-      expect(parser.getBuffer(0)).toBe('');
-    });
+      ctx1.toolCallParser.addChunk(0, '{"a":1}', 'call_A', 'fn_A');
+      ctx2.toolCallParser.addChunk(0, '{"b":2}', 'call_B', 'fn_B');
 
-    it('should be safe to call on empty accumulator', () => {
-      // Call reset on empty accumulator
-      converter.resetStreamingToolCalls();
-
-      // Should not throw any errors
-      const parser = (
-        converter as unknown as {
-          streamingToolCallParser: StreamingToolCallParser;
-        }
-      ).streamingToolCallParser;
-      expect(parser.getBuffer(0)).toBe('');
+      expect(ctx1.toolCallParser.getBuffer(0)).toBe('{"a":1}');
+      expect(ctx2.toolCallParser.getBuffer(0)).toBe('{"b":2}');
+      expect(ctx1.toolCallParser.getToolCallMeta(0).id).toBe('call_A');
+      expect(ctx2.toolCallParser.getToolCallMeta(0).id).toBe('call_B');
     });
   });
 
@@ -846,6 +822,104 @@ describe('OpenAIContentConverter', () => {
         content: '',
       });
     });
+
+    describe('assistant message with reasoning-only content (issue #3421)', () => {
+      /**
+       * When a model (e.g. Ollama qwen3.5:9b) returns a response that contains
+       * reasoning content but an empty text body, the converted assistant message
+       * must use content: "" instead of content: null. Some OpenAI-compatible
+       * providers reject content: null with HTTP 400 when reasoning_content is
+       * present.
+       */
+      it('should use empty string instead of null for content when assistant has only reasoning parts', () => {
+        const request: GenerateContentParameters = {
+          model: 'models/test',
+          contents: [
+            { role: 'user', parts: [{ text: 'Think about this.' }] },
+            {
+              role: 'model',
+              parts: [{ text: 'I reasoned about it.', thought: true }],
+            },
+            { role: 'user', parts: [{ text: 'What did you conclude?' }] },
+          ],
+        };
+
+        const messages = converter.convertGeminiRequestToOpenAI(request);
+
+        const assistantMsg = messages.find((m) => m.role === 'assistant');
+        expect(assistantMsg).toBeDefined();
+        expect((assistantMsg as { content: unknown }).content).toBe('');
+        expect(
+          (assistantMsg as { reasoning_content?: string }).reasoning_content,
+        ).toBe('I reasoned about it.');
+      });
+
+      it('should keep content null when assistant has only tool_calls and no reasoning', () => {
+        const request: GenerateContentParameters = {
+          model: 'models/test',
+          contents: [
+            { role: 'user', parts: [{ text: 'Call the tool.' }] },
+            {
+              role: 'model',
+              parts: [
+                {
+                  functionCall: {
+                    id: 'call_1',
+                    name: 'some_tool',
+                    args: {},
+                  },
+                },
+              ],
+            },
+            {
+              role: 'user',
+              parts: [
+                {
+                  functionResponse: {
+                    id: 'call_1',
+                    name: 'some_tool',
+                    response: { output: 'done' },
+                  },
+                },
+              ],
+            },
+          ],
+        };
+
+        const messages = converter.convertGeminiRequestToOpenAI(request);
+
+        const assistantMsg = messages.find((m) => m.role === 'assistant');
+        expect(assistantMsg).toBeDefined();
+        expect((assistantMsg as { content: unknown }).content).toBeNull();
+      });
+
+      it('should use actual text content when assistant has both reasoning and text', () => {
+        const request: GenerateContentParameters = {
+          model: 'models/test',
+          contents: [
+            { role: 'user', parts: [{ text: 'Explain.' }] },
+            {
+              role: 'model',
+              parts: [
+                { text: 'My hidden reasoning.', thought: true },
+                { text: 'Here is my answer.' },
+              ],
+            },
+          ],
+        };
+
+        const messages = converter.convertGeminiRequestToOpenAI(request);
+
+        const assistantMsg = messages.find((m) => m.role === 'assistant');
+        expect(assistantMsg).toBeDefined();
+        expect((assistantMsg as { content: unknown }).content).toBe(
+          'Here is my answer.',
+        );
+        expect(
+          (assistantMsg as { reasoning_content?: string }).reasoning_content,
+        ).toBe('My hidden reasoning.');
+      });
+    });
   });
 
   describe('MCP multi-part tool results (issue #1520)', () => {
@@ -1063,23 +1137,26 @@ describe('OpenAIContentConverter', () => {
     });
 
     it('should convert streaming reasoning_content delta to a thought part', () => {
-      const chunk = converter.convertOpenAIChunkToGemini({
-        object: 'chat.completion.chunk',
-        id: 'chunk-1',
-        created: 456,
-        choices: [
-          {
-            index: 0,
-            delta: {
-              content: 'visible text',
-              reasoning_content: 'thinking...',
+      const chunk = converter.convertOpenAIChunkToGemini(
+        {
+          object: 'chat.completion.chunk',
+          id: 'chunk-1',
+          created: 456,
+          choices: [
+            {
+              index: 0,
+              delta: {
+                content: 'visible text',
+                reasoning_content: 'thinking...',
+              },
+              finish_reason: 'stop',
+              logprobs: null,
             },
-            finish_reason: 'stop',
-            logprobs: null,
-          },
-        ],
-        model: 'gpt-test',
-      } as unknown as OpenAI.Chat.ChatCompletionChunk);
+          ],
+          model: 'gpt-test',
+        } as unknown as OpenAI.Chat.ChatCompletionChunk,
+        converter.createStreamContext(),
+      );
 
       const parts = chunk.candidates?.[0]?.content?.parts;
       expect(parts?.[0]).toEqual(
@@ -1091,23 +1168,26 @@ describe('OpenAIContentConverter', () => {
     });
 
     it('should convert streaming reasoning delta to a thought part', () => {
-      const chunk = converter.convertOpenAIChunkToGemini({
-        object: 'chat.completion.chunk',
-        id: 'chunk-1b',
-        created: 456,
-        choices: [
-          {
-            index: 0,
-            delta: {
-              content: 'visible text',
-              reasoning: 'thinking...',
+      const chunk = converter.convertOpenAIChunkToGemini(
+        {
+          object: 'chat.completion.chunk',
+          id: 'chunk-1b',
+          created: 456,
+          choices: [
+            {
+              index: 0,
+              delta: {
+                content: 'visible text',
+                reasoning: 'thinking...',
+              },
+              finish_reason: 'stop',
+              logprobs: null,
             },
-            finish_reason: 'stop',
-            logprobs: null,
-          },
-        ],
-        model: 'gpt-test',
-      } as unknown as OpenAI.Chat.ChatCompletionChunk);
+          ],
+          model: 'gpt-test',
+        } as unknown as OpenAI.Chat.ChatCompletionChunk,
+        converter.createStreamContext(),
+      );
 
       const parts = chunk.candidates?.[0]?.content?.parts;
       expect(parts?.[0]).toEqual(
@@ -1119,21 +1199,24 @@ describe('OpenAIContentConverter', () => {
     });
 
     it('should not throw when streaming chunk has no delta', () => {
-      const chunk = converter.convertOpenAIChunkToGemini({
-        object: 'chat.completion.chunk',
-        id: 'chunk-2',
-        created: 456,
-        choices: [
-          {
-            index: 0,
-            // Some OpenAI-compatible providers may omit delta entirely.
-            delta: undefined,
-            finish_reason: null,
-            logprobs: null,
-          },
-        ],
-        model: 'gpt-test',
-      } as unknown as OpenAI.Chat.ChatCompletionChunk);
+      const chunk = converter.convertOpenAIChunkToGemini(
+        {
+          object: 'chat.completion.chunk',
+          id: 'chunk-2',
+          created: 456,
+          choices: [
+            {
+              index: 0,
+              // Some OpenAI-compatible providers may omit delta entirely.
+              delta: undefined,
+              finish_reason: null,
+              logprobs: null,
+            },
+          ],
+          model: 'gpt-test',
+        } as unknown as OpenAI.Chat.ChatCompletionChunk,
+        converter.createStreamContext(),
+      );
 
       const parts = chunk.candidates?.[0]?.content?.parts;
       expect(parts).toEqual([]);
@@ -1145,33 +1228,36 @@ describe('OpenAIContentConverter', () => {
       // with partial JSON. Emitting such a tool call would corrupt the
       // conversation history (downstream provider Pydantic validator fails)
       // and the tool would be invoked with empty args.
-      const chunk = converter.convertOpenAIChunkToGemini({
-        object: 'chat.completion.chunk',
-        id: 'chunk-malformed',
-        created: 789,
-        choices: [
-          {
-            index: 0,
-            delta: {
-              tool_calls: [
-                {
-                  index: 0,
-                  id: 'call_bad',
-                  type: 'function',
-                  function: {
-                    name: 'Read',
-                    arguments:
-                      'Current state — research in progress{"file_path": and more prose without closure',
+      const chunk = converter.convertOpenAIChunkToGemini(
+        {
+          object: 'chat.completion.chunk',
+          id: 'chunk-malformed',
+          created: 789,
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call_bad',
+                    type: 'function',
+                    function: {
+                      name: 'Read',
+                      arguments:
+                        'Current state — research in progress{"file_path": and more prose without closure',
+                    },
                   },
-                },
-              ],
+                ],
+              },
+              finish_reason: 'tool_calls',
+              logprobs: null,
             },
-            finish_reason: 'tool_calls',
-            logprobs: null,
-          },
-        ],
-        model: 'qwen-test',
-      } as unknown as OpenAI.Chat.ChatCompletionChunk);
+          ],
+          model: 'qwen-test',
+        } as unknown as OpenAI.Chat.ChatCompletionChunk,
+        converter.createStreamContext(),
+      );
 
       const parts = chunk.candidates?.[0]?.content?.parts ?? [];
       expect(parts.some((p) => 'functionCall' in p)).toBe(false);
@@ -1291,13 +1377,15 @@ describe('OpenAIContentConverter', () => {
     });
 
     describe('streaming (convertOpenAIChunkToGemini)', () => {
+      let ctx: ReturnType<OpenAIContentConverter['createStreamContext']>;
       beforeEach(() => {
-        converter.resetStreamingToolCalls();
+        ctx = converter.createStreamContext();
       });
 
       it('extracts <think> content arriving in a single chunk', () => {
         const chunk = converter.convertOpenAIChunkToGemini(
           makeChunk('<think>reasoning</think>answer'),
+          ctx,
         );
         const parts = chunk.candidates?.[0]?.content?.parts;
         expect(
@@ -1312,10 +1400,12 @@ describe('OpenAIContentConverter', () => {
         // Chunk 1: opening tag only
         const c1 = converter.convertOpenAIChunkToGemini(
           makeChunk('<think>rea'),
+          ctx,
         );
         // Chunk 2: rest of thought + closing tag + answer
         const c2 = converter.convertOpenAIChunkToGemini(
           makeChunk('soning</think>answer'),
+          ctx,
         );
 
         const thoughtParts1 = c1.candidates?.[0]?.content?.parts?.filter(
@@ -1336,10 +1426,11 @@ describe('OpenAIContentConverter', () => {
       });
 
       it('handles opening tag split across chunks', () => {
-        converter.convertOpenAIChunkToGemini(makeChunk('<thi'));
-        converter.convertOpenAIChunkToGemini(makeChunk('nk>reasoning'));
+        converter.convertOpenAIChunkToGemini(makeChunk('<thi'), ctx);
+        converter.convertOpenAIChunkToGemini(makeChunk('nk>reasoning'), ctx);
         const c3 = converter.convertOpenAIChunkToGemini(
           makeChunk('</think>done'),
+          ctx,
         );
 
         const textPart = c3.candidates?.[0]?.content?.parts?.find(
@@ -1348,10 +1439,15 @@ describe('OpenAIContentConverter', () => {
         expect(textPart?.text).toBe('done');
       });
 
-      it('resets state between streams via resetStreamingToolCalls', () => {
-        converter.convertOpenAIChunkToGemini(makeChunk('<think>orphaned'));
-        converter.resetStreamingToolCalls();
-        const c = converter.convertOpenAIChunkToGemini(makeChunk('clean text'));
+      it('isolates <think> state between streams via separate contexts', () => {
+        // Replaces the old reset-via-method test: per-stream contexts
+        // give us natural isolation without any explicit reset call.
+        converter.convertOpenAIChunkToGemini(makeChunk('<think>orphaned'), ctx);
+        const ctx2 = converter.createStreamContext();
+        const c = converter.convertOpenAIChunkToGemini(
+          makeChunk('clean text'),
+          ctx2,
+        );
         const parts = c.candidates?.[0]?.content?.parts;
         expect(parts).toHaveLength(1);
         expect(parts?.[0]?.text).toBe('clean text');
@@ -2191,51 +2287,58 @@ describe('Truncated tool call detection in streaming', () => {
     }>,
     finishReason: string,
   ) {
+    const ctx = conv.createStreamContext();
     // Feed argument chunks (no finish_reason yet)
     for (const tc of toolCallChunks) {
-      conv.convertOpenAIChunkToGemini({
+      conv.convertOpenAIChunkToGemini(
+        {
+          object: 'chat.completion.chunk',
+          id: 'chunk-stream',
+          created: 100,
+          model: 'test-model',
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: tc.index,
+                    id: tc.id,
+                    type: 'function' as const,
+                    function: {
+                      name: tc.name,
+                      arguments: tc.arguments,
+                    },
+                  },
+                ],
+              },
+              finish_reason: null,
+              logprobs: null,
+            },
+          ],
+        } as unknown as OpenAI.Chat.ChatCompletionChunk,
+        ctx,
+      );
+    }
+
+    // Final chunk with finish_reason
+    return conv.convertOpenAIChunkToGemini(
+      {
         object: 'chat.completion.chunk',
-        id: 'chunk-stream',
-        created: 100,
+        id: 'chunk-final',
+        created: 101,
         model: 'test-model',
         choices: [
           {
             index: 0,
-            delta: {
-              tool_calls: [
-                {
-                  index: tc.index,
-                  id: tc.id,
-                  type: 'function' as const,
-                  function: {
-                    name: tc.name,
-                    arguments: tc.arguments,
-                  },
-                },
-              ],
-            },
-            finish_reason: null,
+            delta: {},
+            finish_reason: finishReason,
             logprobs: null,
           },
         ],
-      } as unknown as OpenAI.Chat.ChatCompletionChunk);
-    }
-
-    // Final chunk with finish_reason
-    return conv.convertOpenAIChunkToGemini({
-      object: 'chat.completion.chunk',
-      id: 'chunk-final',
-      created: 101,
-      model: 'test-model',
-      choices: [
-        {
-          index: 0,
-          delta: {},
-          finish_reason: finishReason,
-          logprobs: null,
-        },
-      ],
-    } as unknown as OpenAI.Chat.ChatCompletionChunk);
+      } as unknown as OpenAI.Chat.ChatCompletionChunk,
+      ctx,
+    );
   }
 
   it('should override finishReason to MAX_TOKENS when tool call JSON is truncated and provider reports "stop"', () => {
@@ -2336,70 +2439,80 @@ describe('Truncated tool call detection in streaming', () => {
   it('should detect truncation with multi-chunk streaming arguments', () => {
     // Feed arguments in multiple small chunks like real streaming
     const conv = new OpenAIContentConverter('test-model');
+    const ctx = conv.createStreamContext();
 
     // Chunk 1: start of JSON with tool metadata
-    conv.convertOpenAIChunkToGemini({
-      object: 'chat.completion.chunk',
-      id: 'c1',
-      created: 100,
-      model: 'test-model',
-      choices: [
-        {
-          index: 0,
-          delta: {
-            tool_calls: [
-              {
-                index: 0,
-                id: 'call_1',
-                type: 'function' as const,
-                function: { name: 'write_file', arguments: '{"file_' },
-              },
-            ],
+    conv.convertOpenAIChunkToGemini(
+      {
+        object: 'chat.completion.chunk',
+        id: 'c1',
+        created: 100,
+        model: 'test-model',
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_1',
+                  type: 'function' as const,
+                  function: { name: 'write_file', arguments: '{"file_' },
+                },
+              ],
+            },
+            finish_reason: null,
+            logprobs: null,
           },
-          finish_reason: null,
-          logprobs: null,
-        },
-      ],
-    } as unknown as OpenAI.Chat.ChatCompletionChunk);
+        ],
+      } as unknown as OpenAI.Chat.ChatCompletionChunk,
+      ctx,
+    );
 
     // Chunk 2: more arguments
-    conv.convertOpenAIChunkToGemini({
-      object: 'chat.completion.chunk',
-      id: 'c2',
-      created: 100,
-      model: 'test-model',
-      choices: [
-        {
-          index: 0,
-          delta: {
-            tool_calls: [
-              {
-                index: 0,
-                function: { arguments: 'path": "/tmp/f.txt", "conten' },
-              },
-            ],
+    conv.convertOpenAIChunkToGemini(
+      {
+        object: 'chat.completion.chunk',
+        id: 'c2',
+        created: 100,
+        model: 'test-model',
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  function: { arguments: 'path": "/tmp/f.txt", "conten' },
+                },
+              ],
+            },
+            finish_reason: null,
+            logprobs: null,
           },
-          finish_reason: null,
-          logprobs: null,
-        },
-      ],
-    } as unknown as OpenAI.Chat.ChatCompletionChunk);
+        ],
+      } as unknown as OpenAI.Chat.ChatCompletionChunk,
+      ctx,
+    );
 
     // Final chunk: finish_reason "stop" but JSON is still incomplete
-    const result = conv.convertOpenAIChunkToGemini({
-      object: 'chat.completion.chunk',
-      id: 'c3',
-      created: 101,
-      model: 'test-model',
-      choices: [
-        {
-          index: 0,
-          delta: {},
-          finish_reason: 'stop',
-          logprobs: null,
-        },
-      ],
-    } as unknown as OpenAI.Chat.ChatCompletionChunk);
+    const result = conv.convertOpenAIChunkToGemini(
+      {
+        object: 'chat.completion.chunk',
+        id: 'c3',
+        created: 101,
+        model: 'test-model',
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+      } as unknown as OpenAI.Chat.ChatCompletionChunk,
+      ctx,
+    );
 
     expect(result.candidates?.[0]?.finishReason).toBe(FinishReason.MAX_TOKENS);
   });

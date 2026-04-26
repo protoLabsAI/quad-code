@@ -131,8 +131,12 @@ export class ContentGenerationPipeline {
     // Accumulate streamed response text for telemetry prompt logging
     const completionParts: string[] = [];
 
-    // Reset streaming tool calls to prevent data pollution from previous streams
-    this.converter.resetStreamingToolCalls();
+    // Stream-local parser state. Previously the tool-call parser lived on
+    // the Converter singleton and was reset at stream start — but that
+    // wiped concurrent streams' in-flight buffers (e.g. parallel subagents
+    // sharing the same Config.contentGenerator). Scoping it per-stream
+    // fixes issue #3516.
+    const streamCtx = this.converter.createStreamContext();
 
     // State for handling chunk merging.
     // pendingFinishResponse holds a finish chunk waiting to be merged with
@@ -179,7 +183,10 @@ export class ContentGenerationPipeline {
           throw new StreamContentError(errorContent);
         }
 
-        const response = this.converter.convertOpenAIChunkToGemini(chunk);
+        const response = this.converter.convertOpenAIChunkToGemini(
+          chunk,
+          streamCtx,
+        );
 
         // Stage 2b: Filter empty responses to avoid downstream issues
         if (
@@ -299,8 +306,8 @@ export class ContentGenerationPipeline {
         context.span.end();
       }
     } catch (error) {
-      // Clear streaming tool calls on error to prevent data pollution
-      this.converter.resetStreamingToolCalls();
+      // No manual parser cleanup needed — streamCtx is stream-local and
+      // will be garbage collected when this generator unwinds.
 
       // End the OTel span on error if it was deferred for streaming
       if (context.span) {
@@ -490,6 +497,14 @@ export class ContentGenerationPipeline {
 
       return value !== undefined ? { [key]: value } : {};
     };
+
+    // When samplingParams is set, its keys pass through to the wire verbatim.
+    // This lets users target provider-specific parameter names
+    // (e.g. `max_completion_tokens` for GPT-5 / o-series) without a client release.
+    // When absent, the historical default behavior applies.
+    if (configSamplingParams !== undefined) {
+      return { ...configSamplingParams };
+    }
 
     const params: Record<string, unknown> = {
       // Parameters with request fallback but no defaults
