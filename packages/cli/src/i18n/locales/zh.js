@@ -374,7 +374,7 @@ export default {
   'Custom Witty Phrases': '自定义诙谐短语',
   'Show Welcome Back Dialog': '显示欢迎回来对话框',
   'Enable User Feedback': '启用用户反馈',
-  'How is Qwen doing this session? (optional)': 'Qwen 这次表现如何？（可选）',
+  'How is proto doing this session? (optional)': 'Qwen 这次表现如何？（可选）',
   Bad: '不满意',
   Fine: '还行',
   Good: '满意',
