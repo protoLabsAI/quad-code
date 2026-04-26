@@ -289,7 +289,12 @@ export class ShellToolInvocation extends BaseToolInvocation<
       // On Windows, we rely on the race logic below to handle background tasks.
       // We just ensure the command string is clean.
       if (isWindows && shouldRunInBackground) {
-        finalCommand = finalCommand.trim().replace(/&+$/, '').trim();
+        // Strip any trailing & without a regex — `&+$` looked benign but
+        // tripped CodeQL's polynomial-redos rule. A simple loop has no
+        // backtracking risk and the same intent.
+        let s = finalCommand.trim();
+        while (s.endsWith('&')) s = s.slice(0, -1);
+        finalCommand = s.trimEnd();
       }
 
       // Build the shell wrapper.
@@ -301,8 +306,11 @@ export class ShellToolInvocation extends BaseToolInvocation<
       // - For foreground commands: pass through unchanged.
       const commandToExecute = (() => {
         if (!shouldRunInBackground || !useDiskCapture) return finalCommand;
-        // Strip trailing & — we'll re-add it on the subshell wrapper.
-        const inner = finalCommand.trim().replace(/\s*&\s*$/, '');
+        // Strip trailing & (and any preceding whitespace) — we'll re-add it
+        // on the subshell wrapper. Plain string ops instead of `\s*&\s*$`
+        // because the regex tripped CodeQL's polynomial-redos rule.
+        let inner = finalCommand.trim();
+        if (inner.endsWith('&')) inner = inner.slice(0, -1).trimEnd();
         return [
           // (<cmd>) >output 2>&1; echo $? >exit  — runs in its own subshell
           // detached with `&`, so the OS keeps writing even after our
