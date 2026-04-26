@@ -24,7 +24,7 @@ import {
   CoreToolScheduler,
   createDebugLogger,
 } from '@qwen-code/qwen-code-core';
-import { useCallback, useState, useMemo } from 'react';
+import { useCallback, useState, useMemo, useRef } from 'react';
 import type {
   HistoryItemToolGroup,
   IndividualToolCallDisplay,
@@ -38,6 +38,16 @@ export type ScheduleFn = (
   signal: AbortSignal,
 ) => void;
 export type MarkToolsAsSubmittedFn = (callIds: string[]) => void;
+/**
+ * Forcibly transition any non-terminal tool calls to a synthetic
+ * `cancelled` state with `responseSubmittedToGemini=true`. Used by the
+ * cancel handler to unblock `streamingState` when a tool ignores its
+ * AbortSignal — the underlying process may keep running, but the UI
+ * stops being held hostage by it. Returns the number of calls that
+ * were force-cancelled (so callers can decide whether to surface a
+ * notice).
+ */
+export type ForceCancelStaleToolCallsFn = () => number;
 
 export type TrackedScheduledToolCall = ScheduledToolCall & {
   responseSubmittedToGemini?: boolean;
@@ -72,7 +82,12 @@ export function useReactToolScheduler(
   config: Config,
   getPreferredEditor: () => EditorType | undefined,
   onEditorClose: () => void,
-): [TrackedToolCall[], ScheduleFn, MarkToolsAsSubmittedFn] {
+): [
+  TrackedToolCall[],
+  ScheduleFn,
+  MarkToolsAsSubmittedFn,
+  ForceCancelStaleToolCallsFn,
+] {
   const [toolCallsForDisplay, setToolCallsForDisplay] = useState<
     TrackedToolCall[]
   >([]);
@@ -179,7 +194,76 @@ export function useReactToolScheduler(
     [],
   );
 
-  return [toolCallsForDisplay, schedule, markToolsAsSubmitted];
+  // Track how many calls were transitioned by the most recent
+  // forceCancelStaleToolCalls invocation. The setter callback runs inside
+  // setToolCallsForDisplay's reducer, so we need a side-channel ref to
+  // return a synchronous count to the caller.
+  const lastForceCancelledCountRef = useRef(0);
+
+  const forceCancelStaleToolCalls: ForceCancelStaleToolCallsFn =
+    useCallback(() => {
+      lastForceCancelledCountRef.current = 0;
+      setToolCallsForDisplay((prevCalls) => {
+        let changed = 0;
+        const next = prevCalls.map((tc): TrackedToolCall => {
+          // Already terminal: just guarantee the submitted flag so
+          // streamingState clears even if handleCompletedTools never ran.
+          if (
+            tc.status === 'success' ||
+            tc.status === 'error' ||
+            tc.status === 'cancelled'
+          ) {
+            if (tc.responseSubmittedToGemini) return tc;
+            changed++;
+            return { ...tc, responseSubmittedToGemini: true };
+          }
+
+          // Non-terminal: synthesize a cancelled response. The underlying
+          // process may still be running — the UI stops waiting on it.
+          changed++;
+          const cancelled: TrackedCancelledToolCall = {
+            request: tc.request,
+            tool: 'tool' in tc ? tc.tool : undefined!,
+            invocation: 'invocation' in tc ? tc.invocation : undefined!,
+            status: 'cancelled',
+            response: {
+              callId: tc.request.callId,
+              error: undefined,
+              errorType: undefined,
+              responseParts: [
+                {
+                  functionResponse: {
+                    id: tc.request.callId,
+                    name: tc.request.name,
+                    response: {
+                      error:
+                        'User cancelled. Tool was force-cleared after the abort signal did not stop it within the grace window; the underlying process may still be running.',
+                    },
+                  },
+                },
+              ],
+              resultDisplay:
+                'Force-cancelled (tool did not honor AbortSignal in time).',
+              contentLength: undefined,
+            },
+            durationMs: undefined,
+            outcome: tc.outcome,
+            responseSubmittedToGemini: true,
+          };
+          return cancelled;
+        });
+        lastForceCancelledCountRef.current = changed;
+        return changed > 0 ? next : prevCalls;
+      });
+      return lastForceCancelledCountRef.current;
+    }, []);
+
+  return [
+    toolCallsForDisplay,
+    schedule,
+    markToolsAsSubmitted,
+    forceCancelStaleToolCalls,
+  ];
 }
 
 /**

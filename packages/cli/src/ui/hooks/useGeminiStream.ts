@@ -38,6 +38,7 @@ import {
   ToolConfirmationOutcome,
   logApiCancel,
   ApiCancelEvent,
+  endTurnSpan,
   isSupportedImageMimeType,
   getUnsupportedImageFormatWarning,
   hasFileEdits,
@@ -262,13 +263,27 @@ export const useGeminiStream = (
     [],
   );
 
-  const [toolCalls, scheduleToolCalls, markToolsAsSubmitted] =
-    useReactToolScheduler(
-      stableOnComplete,
-      config,
-      getPreferredEditor,
-      onEditorClose,
-    );
+  const [
+    toolCalls,
+    scheduleToolCalls,
+    markToolsAsSubmitted,
+    forceCancelStaleToolCalls,
+  ] = useReactToolScheduler(
+    stableOnComplete,
+    config,
+    getPreferredEditor,
+    onEditorClose,
+  );
+
+  // Stable refs so cancelOngoingRequest can read the current toolCalls
+  // and call forceCancelStaleToolCalls without itself depending on those
+  // values (which would invalidate the callback every render).
+  const toolCallsRef = useRef(toolCalls);
+  toolCallsRef.current = toolCalls;
+  const markToolsAsSubmittedRef = useRef(markToolsAsSubmitted);
+  markToolsAsSubmittedRef.current = markToolsAsSubmitted;
+  const forceCancelStaleToolCallsRef = useRef(forceCancelStaleToolCalls);
+  forceCancelStaleToolCallsRef.current = forceCancelStaleToolCalls;
 
   const pendingToolCallGroupDisplay = useMemo(
     () =>
@@ -510,6 +525,40 @@ export const useGeminiStream = (
     onCancelSubmit();
     setIsResponding(false);
     setShellInputFocused(false);
+
+    // Close any leaked OTel turn span so the recap / prompt-suggestion
+    // LLM calls that fire on streamingState=Idle don't get nested under
+    // a still-open turn span (Langfuse otherwise reports the turn as
+    // running until the next prompt opens a new span).
+    endTurnSpan('ok');
+
+    // Immediately flip responseSubmittedToGemini=true on every current
+    // toolCall. Handles the common case where a tool finished but the
+    // submitted flag wasn't flipped (the in-code comment at the top of
+    // this hook documents the same class of bug for a different cause).
+    const currentCallIds = toolCallsRef.current.map((tc) => tc.request.callId);
+    if (currentCallIds.length > 0) {
+      markToolsAsSubmittedRef.current(currentCallIds);
+    }
+
+    // Schedule a grace-window force-clear for any tool that ignored the
+    // abort signal. Without this, a runaway subagent (or any tool that
+    // doesn't honor signal.aborted) leaves the toolCall in a non-terminal
+    // state, which keeps streamingState=Responding and silently drops
+    // every subsequent user submission via submitQuery's guard at line
+    // 1305. Three seconds is generous — well-behaved tools clean up in ms.
+    setTimeout(() => {
+      const cleared = forceCancelStaleToolCallsRef.current();
+      if (cleared > 0) {
+        addItem(
+          {
+            type: MessageType.WARNING,
+            text: `Force-cleared ${cleared} stuck tool call(s) after cancel grace window. The underlying process(es) may still be running in the background.`,
+          },
+          Date.now(),
+        );
+      }
+    }, 3000);
   }, [
     streamingState,
     addItem,
@@ -1310,6 +1359,31 @@ export const useGeminiStream = (
       ) {
         // Release the guard — we're not actually going to run
         if (generation !== null) queryGuardRef.current.end(generation);
+        // Surface the dropped submission so the user knows their input was
+        // not sent. Previously this was a silent `return`, which made
+        // protoCLI feel hung when a tool refused to honor cancel — the
+        // user types and gets nothing back forever. With the cancel
+        // handler's grace-window force-clear (~3s), this state is now
+        // self-resolving; the message just tells them to wait or retry.
+        const stateLabel =
+          streamingState === StreamingState.Responding
+            ? 'still responding'
+            : streamingState === StreamingState.WaitingForConfirmation
+              ? 'awaiting tool confirmation'
+              : 'backgrounded';
+        addItem(
+          {
+            type: MessageType.WARNING,
+            text: `Input not sent — previous turn is ${stateLabel}. ${
+              streamingState === StreamingState.WaitingForConfirmation
+                ? 'Approve or reject the pending tool call first.'
+                : streamingState === StreamingState.Backgrounded
+                  ? 'Wait for the backgrounded turn to finish or press Esc to cancel.'
+                  : 'Press Esc to cancel and try again (stuck tools auto-clear after 3s).'
+            }`,
+          },
+          Date.now(),
+        );
         return;
       }
 
