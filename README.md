@@ -174,11 +174,23 @@ proto auto-discovers Claude Code plugins installed at `~/.claude/plugins/`. Any 
 
 ### Environment variable overrides
 
-| Variable                        | Default | Description                                                                                     |
-| ------------------------------- | ------- | ----------------------------------------------------------------------------------------------- |
-| `PROTO_STREAM_STALL_TIMEOUT_MS` | `90000` | Max ms to wait between streaming chunks before declaring the connection stalled (then retrying) |
-| `PROTO_SYSTEM_DEFAULTS_PATH`    | —       | Override path to the system defaults settings file                                              |
-| `PROTO_SYSTEM_SETTINGS_PATH`    | —       | Override path to the system settings override file                                              |
+| Variable                            | Default | Description                                                                                                                                                                        |
+| ----------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROTO_STREAM_STALL_TIMEOUT_MS`     | `90000` | Max ms to wait between streaming chunks before declaring the connection stalled (then retrying)                                                                                    |
+| `PROTO_SYSTEM_DEFAULTS_PATH`        | —       | Override path to the system defaults settings file                                                                                                                                 |
+| `PROTO_SYSTEM_SETTINGS_PATH`        | —       | Override path to the system settings override file                                                                                                                                 |
+| `PROTO_LEGACY_ERASE_LINES`          | —       | Set to `1` to disable the cursor-collapse optimizer that prevents Ink scrollback bouncing during streaming renders. Only set this if it interferes with your terminal.             |
+| `PROTO_FORCE_SYNCHRONIZED_OUTPUT`   | —       | Set to `1` to force-enable BSU/ESU atomic-frame escape codes regardless of terminal auto-detect (useful if your terminal supports DEC mode 2026 but isn't on the allowlist below). |
+| `PROTO_DISABLE_SYNCHRONIZED_OUTPUT` | —       | Set to `1` to opt out of synchronized output even on supported terminals.                                                                                                          |
+
+### TUI flicker mitigation
+
+proto installs two stdout interventions to reduce flicker during streaming renders:
+
+1. **Cursor-collapse optimizer** — collapses Ink's per-line `{ERASE_LINE, CURSOR_UP_ONE}` sequences into a single bounded erase. Universal; bypass via `PROTO_LEGACY_ERASE_LINES=1`.
+2. **Synchronized output** — wraps each render frame in BSU/ESU escape codes (DEC mode 2026) on terminals that support it. Auto-detected for: **Alacritty (≥0.14), Ghostty, Kitty, WezTerm, iTerm2**. For other DEC-2026-capable terminals, set `PROTO_FORCE_SYNCHRONIZED_OUTPUT=1`.
+
+Both no-op outside a TTY, in screen-reader mode, or under tmux/SSH.
 
 ## Observability
 
