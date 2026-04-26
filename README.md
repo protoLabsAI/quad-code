@@ -9,14 +9,27 @@ proto is a fork of [Qwen Code](https://github.com/QwenLM/qwen-code) (itself fork
 
 ## What's Different
 
-| Feature          | Qwen Code               | proto                                                                          |
-| ---------------- | ----------------------- | ------------------------------------------------------------------------------ |
-| Default model    | Qwen3-Coder             | Any (configurable)                                                             |
-| Task management  | In-memory JSON          | [beads_rust](https://github.com/Dicklesworthstone/beads_rust) (SQLite + JSONL) |
-| Memory           | Single append-only file | File-per-memory with YAML frontmatter, 4-type taxonomy, auto-extraction        |
-| MCP servers      | None                    | Configurable via `~/.proto/settings.json`                                      |
-| Plugin discovery | Qwen only               | Auto-discovers Claude Code plugins from `~/.claude/plugins/`                   |
-| Skills           | Nested superpowers      | Flat bundled skills (16 skills, all discoverable)                              |
+At-a-glance overview vs. upstream Qwen Code. For the full architectural breakdown see [`docs/architecture/divergence-from-upstream.md`](./docs/architecture/divergence-from-upstream.md).
+
+| Category              | Qwen Code                 | proto                                                                                                                                                    |
+| --------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Default model         | Qwen3-Coder               | Any (LiteLLM / OpenAI-compat / Anthropic / Gemini)                                                                                                       |
+| Agent harness         | —                         | Sprint contracts + scope lock, behavior-verify gate, multi-sample selector, doom-loop reminders, session memory + evolve, checkpoint/rewind, speculation |
+| Bundled skills        | 0 (use external)          | 22 (sprint-contract, verification-before-completion, systematic-debugging, …)                                                                            |
+| Subagent execution    | Sequential                | Concurrent batched — Agent calls run in parallel; tool ordering preserved                                                                                |
+| Tool-call streaming   | Per-converter parser      | Per-stream parser context (no cross-stream corruption); malformed JSON → UI-hidden recovery note                                                         |
+| Reasoning models      | Basic `reasoning_content` | Inline `<think>`-tag extraction (Minimax/QwQ); reasoning-only `content: ""` fix; preserved on session resume                                             |
+| Truncation handling   | Best-effort               | MAX_TOKENS cascade detection + tool-response trimming; rejected truncated edits                                                                          |
+| Task management       | In-memory JSON            | [beads_rust](https://github.com/Dicklesworthstone/beads_rust) (SQLite + JSONL)                                                                           |
+| Memory                | Single append-only file   | File-per-memory with YAML frontmatter, 4-type taxonomy, auto-extraction                                                                                  |
+| MCP servers           | None                      | Configurable via `~/.proto/settings.json`; SSE/HTTP/stdio in ACP mode                                                                                    |
+| Plugin discovery      | Qwen only                 | Auto-discovers Claude Code plugins from `~/.claude/plugins/`                                                                                             |
+| Ignore files          | `.qwenignore`             | `.protoignore` + inherits `.claudeignore` patterns                                                                                                       |
+| ACP / Zed integration | Stock                     | Cron-in-Session, concurrent Agent calls, SSE/HTTP MCP, internal-part filtering                                                                           |
+| Extra built-in tools  | Standard set              | + browser automation, repo-map (PageRank), task tools, mailbox, LSP, voice/STT                                                                           |
+| Observability         | Console                   | Langfuse OTLP traces with harness-intervention spans (SFT-ready)                                                                                         |
+| Release pipeline      | Manual                    | Conventional-commit auto-release (`feat:` → minor, `fix:` → patch)                                                                                       |
+| VS Code companion     | Included                  | Removed (focus on TUI + ACP/Zed)                                                                                                                         |
 
 ## Installation
 
