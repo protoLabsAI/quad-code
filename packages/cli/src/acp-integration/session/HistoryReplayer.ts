@@ -5,6 +5,7 @@
  */
 
 import type { ChatRecord, AgentResultDisplay } from '@qwen-code/qwen-code-core';
+import { isInternalPart } from '@qwen-code/qwen-code-core';
 import type {
   Content,
   GenerateContentResponseUsageMetadata,
@@ -94,6 +95,7 @@ export class HistoryReplayer {
     for (const part of content.parts ?? []) {
       // Text content
       if ('text' in part && part.text) {
+        if (isInternalPart(part)) continue;
         const isThought = (part as { thought?: boolean }).thought ?? false;
         await this.messageEmitter.emitMessage(
           part.text,

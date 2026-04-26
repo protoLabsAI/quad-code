@@ -1156,12 +1156,14 @@ export class OpenAIContentConverter {
           // Drop malformed tool calls — emitting them with empty args would
           // both fail the actual tool invocation and poison the conversation
           // history, causing downstream provider (LiteLLM/Pydantic) failures
-          // on subsequent turns. Surface a visible text note so the model
-          // can recover instead of silently stalling.
+          // on subsequent turns. Inject a recovery note as an internal
+          // (UI-hidden, model-visible) part so the model retries on the next
+          // turn without flooding the user with noise.
           if (toolCall.malformed) {
             parts.push({
               text: `[tool_call dropped: upstream streamed malformed JSON arguments for \`${toolCall.name}\`. Retry the call with properly-formed arguments.]`,
-            });
+              protoInternal: true,
+            } as Part);
             continue;
           }
 

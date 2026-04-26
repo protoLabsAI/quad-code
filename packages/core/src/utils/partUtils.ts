@@ -12,6 +12,20 @@ import type {
 } from '@google/genai';
 
 /**
+ * Proto-namespaced flag marking a Part as model-visible / UI-hidden.
+ * Used today for tool_call recovery notes injected when upstream streams
+ * malformed JSON: the model needs to see the note so it retries on the
+ * next turn, but the user shouldn't see the noise.
+ */
+export function isInternalPart(part: unknown): boolean {
+  return (
+    typeof part === 'object' &&
+    part !== null &&
+    (part as { protoInternal?: boolean }).protoInternal === true
+  );
+}
+
+/**
  * Converts a PartListUnion into a string.
  * If verbose is true, includes summary representations of non-text parts.
  */
@@ -81,7 +95,7 @@ export function getResponseText(
       candidate.content.parts.length > 0
     ) {
       return candidate.content.parts
-        .filter((part) => part.text && !part.thought)
+        .filter((part) => part.text && !part.thought && !isInternalPart(part))
         .map((part) => part.text)
         .join('');
     }

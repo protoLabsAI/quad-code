@@ -102,7 +102,7 @@ describe('SettingsSchema', () => {
       ).toBeDefined();
       expect(
         getSettingsSchema().context.properties.fileFiltering.properties
-          ?.respectQwenIgnore,
+          ?.respectProtoIgnore,
       ).toBeDefined();
       expect(
         getSettingsSchema().context.properties.fileFiltering.properties

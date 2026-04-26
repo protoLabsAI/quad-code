@@ -1371,7 +1371,7 @@ describe('SettingsDialog', () => {
           loadFromIncludeDirectories: true,
           fileFiltering: {
             respectGitIgnore: true,
-            respectQwenIgnore: true,
+            respectProtoIgnore: true,
             enableRecursiveFileSearch: true,
             disableFuzzySearch: false,
           },
@@ -1536,7 +1536,7 @@ describe('SettingsDialog', () => {
         context: {
           fileFiltering: {
             respectGitIgnore: false,
-            respectQwenIgnore: true,
+            respectProtoIgnore: true,
             enableRecursiveFileSearch: false,
             disableFuzzySearch: true,
           },
@@ -1608,7 +1608,7 @@ describe('SettingsDialog', () => {
           loadFromIncludeDirectories: false,
           fileFiltering: {
             respectGitIgnore: false,
-            respectQwenIgnore: false,
+            respectProtoIgnore: false,
             enableRecursiveFileSearch: false,
             disableFuzzySearch: false,
           },

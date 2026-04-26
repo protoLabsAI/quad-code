@@ -18,6 +18,7 @@ import {
   GeminiEventType,
   ToolErrorType,
   parseAndFormatApiError,
+  isInternalPart,
 } from '@qwen-code/qwen-code-core';
 import type { Part, GenerateContentResponseUsageMetadata } from '@google/genai';
 import type {
@@ -1188,6 +1189,9 @@ export function partsToContentBlock(parts: Part[]): ContentBlock[] {
   let currentTextBlock: TextBlock | null = null;
 
   for (const part of parts) {
+    // Skip internal (UI-hidden) parts — model-only recovery notes etc.
+    if (isInternalPart(part)) continue;
+
     let textContent: string | null = null;
 
     // Handle text parts
@@ -1237,6 +1241,7 @@ export function partsToContentBlock(parts: Part[]): ContentBlock[] {
  */
 export function partsToString(parts: Part[]): string {
   return parts
+    .filter((part) => !isInternalPart(part))
     .map((part) => {
       if ('text' in part && typeof part.text === 'string') {
         return part.text;

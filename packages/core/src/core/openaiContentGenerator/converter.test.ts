@@ -1139,7 +1139,7 @@ describe('OpenAIContentConverter', () => {
       expect(parts).toEqual([]);
     });
 
-    it('should drop malformed streaming tool_calls and emit a recovery text part', () => {
+    it('should drop malformed streaming tool_calls and emit a hidden recovery part', () => {
       // Reproduces the upstream vLLM-with-broken-chat-template failure mode
       // where tool_call.function.arguments chunks contain prose interleaved
       // with partial JSON. Emitting such a tool call would corrupt the
@@ -1177,10 +1177,13 @@ describe('OpenAIContentConverter', () => {
       expect(parts.some((p) => 'functionCall' in p)).toBe(false);
       const textPart = parts.find(
         (p) => 'text' in p && typeof p.text === 'string',
-      ) as { text: string } | undefined;
+      ) as { text: string; protoInternal?: boolean } | undefined;
       expect(textPart).toBeDefined();
       expect(textPart!.text).toMatch(/tool_call dropped/);
       expect(textPart!.text).toContain('Read');
+      // Hidden from UI surfaces; still present in parts so the model sees
+      // the recovery hint on the next turn.
+      expect(textPart!.protoInternal).toBe(true);
     });
   });
 
