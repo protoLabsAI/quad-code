@@ -896,10 +896,15 @@ export class Session implements SessionContext {
       const isAskUserQuestionTool = fc.name === ToolNames.ASK_USER_QUESTION;
 
       // ---- L3: Tool's default permission ----
-      // In YOLO mode, force 'allow' for everything except ask_user_question.
+      // In YOLO mode, force 'allow' for everything except ask_user_question
+      // and exit_plan_mode. Both rely on the confirmation dialog firing their
+      // onConfirm callback (ask_user_question to capture the answer,
+      // exit_plan_mode to set wasApproved); auto-approving them here would
+      // skip getConfirmationDetails entirely and break the tool.
       const defaultPermission =
         this.config.getApprovalMode() !== ApprovalMode.YOLO ||
-        isAskUserQuestionTool
+        isAskUserQuestionTool ||
+        isExitPlanModeTool
           ? await invocation.getDefaultPermission()
           : 'allow';
 
