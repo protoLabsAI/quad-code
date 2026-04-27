@@ -1799,6 +1799,33 @@ export const useGeminiStream = (
         return;
       }
 
+      // If the user already pressed Esc, do NOT feed tool results back to
+      // the model. Some tools (long shells, slow subagents) finish with
+      // status='success' even after the abort signal because they didn't
+      // honor it before completing. submitQuery(ToolResult) below would
+      // then create a fresh AbortController and reset turnCancelledRef
+      // (line 1343), undoing the cancel. Net effect: cancel briefly stops
+      // things, then the loop resumes for as long as tool results keep
+      // landing — turn span stays closed but new LLM calls fire orphan,
+      // and streamingState ping-pongs Idle/Responding so user input gets
+      // dropped by the silent guard in submitQuery.
+      // Just mark the completed tools as submitted (so streamingState
+      // clears) and bail.
+      if (turnCancelledRef.current) {
+        const terminalCallIds = completedToolCallsFromScheduler
+          .filter(
+            (tc) =>
+              tc.status === 'success' ||
+              tc.status === 'error' ||
+              tc.status === 'cancelled',
+          )
+          .map((tc) => tc.request.callId);
+        if (terminalCallIds.length > 0) {
+          markToolsAsSubmitted(terminalCallIds);
+        }
+        return;
+      }
+
       const completedAndReadyToSubmitTools =
         completedToolCallsFromScheduler.filter(
           (
