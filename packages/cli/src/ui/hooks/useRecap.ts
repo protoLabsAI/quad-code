@@ -110,12 +110,24 @@ export function useRecap(opts: UseRecapOptions): void {
       // Skip if the agent has already produced a recap for this turn.
       if (hasRecapSinceLastUserTurn(history)) return;
 
+      // Skip if there's no actual LLM conversation to summarize. Slash
+      // commands like /commit or /init flip streamingState through tools
+      // without ever calling the model — `geminiClient.getHistory()`
+      // returns empty in that case, and a recap built from an empty
+      // history makes the model hallucinate ("I don't have access to
+      // any previous conversation"). We require at least one prior
+      // model-role turn AND at least one prior user-role turn so the
+      // recap has something concrete to lead with.
+      const conversation = geminiClient.getHistory?.() ?? [];
+      const hasModelHistory = conversation.some((c) => c.role === 'model');
+      const hasUserHistory = conversation.some((c) => c.role === 'user');
+      if (!hasModelHistory || !hasUserHistory) return;
+
       // Cancel any in-flight prior generation; only one recap per turn.
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const conversation = geminiClient.getHistory?.() ?? [];
       void generateRecap(config, conversation, controller.signal).then(
         (text) => {
           if (controller.signal.aborted || !text) return;
