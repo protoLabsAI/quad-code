@@ -84,11 +84,11 @@ In addition to `settings.json`, the `.proto/` directory can contain:
 
 These variables take effect at runtime and do not require a settings file entry.
 
-| Variable                        | Default | Description                                                                                                                                                      |
-| ------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PROTO_STREAM_STALL_TIMEOUT_MS` | `90000` | Max ms to wait between streaming chunks before the stall watchdog fires (throws a retryable error). Increase if complex agentic responses are hitting the limit. |
-| `PROTO_SYSTEM_DEFAULTS_PATH`    | —       | Override path to the system defaults settings file                                                                                                               |
-| `PROTO_SYSTEM_SETTINGS_PATH`    | —       | Override path to the system settings override file                                                                                                               |
+| Variable                        | Default  | Description                                                                                                                                                      |
+| ------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROTO_STREAM_STALL_TIMEOUT_MS` | `300000` | Max ms to wait between streaming chunks before the stall watchdog fires (throws a retryable error). Increase if complex agentic responses are hitting the limit. |
+| `PROTO_SYSTEM_DEFAULTS_PATH`    | —        | Override path to the system defaults settings file                                                                                                               |
+| `PROTO_SYSTEM_SETTINGS_PATH`    | —        | Override path to the system settings override file                                                                                                               |
 
 ### `modelProviders`
 

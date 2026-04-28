@@ -363,7 +363,7 @@ export type HistoryItemBtw = HistoryItemBase & {
 };
 
 /**
- * "Where we left off" recap card, appended after long agent turns.
+ * "Where we left off" recap card, emitted by the /recap slash command.
  */
 export type HistoryItemRecap = HistoryItemBase & {
   type: 'recap';

@@ -4,79 +4,56 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  CommandContext,
-  SlashCommand,
-  SlashCommandActionReturn,
-} from './types.js';
+import { generateRecap } from '@qwen-code/qwen-code-core';
+import type { CommandContext, SlashCommand } from './types.js';
 import { CommandKind } from './types.js';
-import { SettingScope } from '../../config/settings.js';
-
-const DEFAULT_THRESHOLD_SECONDS = 300;
-const DEFAULT_THRESHOLD_TOOL_CALLS = 15;
-
-function statusMessage(context: CommandContext): SlashCommandActionReturn {
-  const merged = context.services.settings.merged;
-  const enabled = merged.recap?.enabled ?? true;
-  const seconds = merged.recap?.thresholdSeconds ?? DEFAULT_THRESHOLD_SECONDS;
-  const toolCalls =
-    merged.recap?.thresholdToolCalls ?? DEFAULT_THRESHOLD_TOOL_CALLS;
-
-  return {
-    type: 'message',
-    messageType: 'info',
-    content: [
-      `Recap: ${enabled ? 'enabled' : 'disabled'}`,
-      `Duration threshold: ${seconds}s`,
-      `Tool-call threshold: ${toolCalls}`,
-      enabled
-        ? 'A "where we left off" card will be appended after long agent turns.'
-        : 'Run /recap enable to turn it back on.',
-    ].join('\n'),
-  };
-}
-
-function setEnabled(
-  context: CommandContext,
-  value: boolean,
-): SlashCommandActionReturn {
-  context.services.settings.setValue(SettingScope.User, 'recap.enabled', value);
-  return {
-    type: 'message',
-    messageType: 'info',
-    content: value
-      ? 'Recap enabled. Long-running turns will produce a "where we left off" card.'
-      : 'Recap disabled.',
-  };
-}
+import { MessageType } from '../types.js';
 
 export const recapCommand: SlashCommand = {
   name: 'recap',
   description:
-    'Toggle the long-turn recap card (※ where we left off). Run with no args for status.',
+    'Print a short "where we left off" card summarizing the recent conversation.',
   kind: CommandKind.BUILT_IN,
-  subCommands: [
-    {
-      name: 'status',
-      description: 'Show recap status and thresholds',
-      kind: CommandKind.BUILT_IN,
-      action: statusMessage,
-    },
-    {
-      name: 'enable',
-      description: 'Enable the long-turn recap card',
-      kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext): SlashCommandActionReturn =>
-        setEnabled(context, true),
-    },
-    {
-      name: 'disable',
-      description: 'Disable the long-turn recap card',
-      kind: CommandKind.BUILT_IN,
-      action: (context: CommandContext): SlashCommandActionReturn =>
-        setEnabled(context, false),
-    },
-  ],
-  action: (context: CommandContext): SlashCommandActionReturn =>
-    statusMessage(context),
+  action: async (context: CommandContext) => {
+    const config = context.services.config;
+    const geminiClient = config?.getGeminiClient();
+    if (!config || !geminiClient) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Config not loaded.',
+      };
+    }
+
+    const conversation = geminiClient.getHistory?.() ?? [];
+    const hasModel = conversation.some((c) => c.role === 'model');
+    const hasUser = conversation.some((c) => c.role === 'user');
+    if (!hasModel || !hasUser) {
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: 'No conversation to recap yet.',
+      };
+    }
+
+    const controller = new AbortController();
+    const onUpstreamAbort = () => controller.abort();
+    context.abortSignal?.addEventListener('abort', onUpstreamAbort);
+
+    try {
+      const text = await generateRecap(config, conversation, controller.signal);
+      if (controller.signal.aborted) return undefined;
+      if (!text) {
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: 'Recap returned no content.',
+        };
+      }
+      context.ui.addItem({ type: MessageType.RECAP, text }, Date.now());
+      return undefined;
+    } finally {
+      context.abortSignal?.removeEventListener('abort', onUpstreamAbort);
+    }
+  },
 };

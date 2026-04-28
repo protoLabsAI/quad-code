@@ -103,8 +103,6 @@ import {
   CompletionChecker,
   type ToolCallRecord,
 } from '../hooks/completion-checker.js';
-import { BuiltinAgentRegistry } from '../subagents/builtin-agents.js';
-import { ContextState } from '../agents/runtime/agent-headless.js';
 
 const MAX_TURNS = 100;
 
@@ -135,13 +133,6 @@ export class GeminiClient {
    * being forced and did it fail?
    */
   private hasFailedCompressionAttempt = false;
-
-  /**
-   * Tracks how many times the verification agent has been invoked
-   * during this session to prevent infinite verification loops.
-   */
-  private verificationAttempts = 0;
-  private static readonly MAX_VERIFICATION_ATTEMPTS = 3;
 
   /**
    * Maps promptId → history length captured just before the user message for
@@ -991,93 +982,6 @@ export class GeminiClient {
         );
         if (ownsTurnSpan) endTurnSpan('ok');
         return completionResult;
-      }
-    }
-
-    // Run verification agent before the session concludes.
-    // Only runs when the main agent has finished (no pending tool calls),
-    // is not a recursive hook continuation, and hasn't exceeded max attempts.
-    if (
-      !turn.pendingToolCalls.length &&
-      signal &&
-      !signal.aborted &&
-      messageType !== SendMessageType.Hook &&
-      this.verificationAttempts < GeminiClient.MAX_VERIFICATION_ATTEMPTS
-    ) {
-      const verifyConfig = BuiltinAgentRegistry.getBuiltinAgent('verify');
-      if (verifyConfig) {
-        this.verificationAttempts++;
-        try {
-          const subagentManager = this.config.getSubagentManager();
-          const verifyAgent = await subagentManager.createAgentHeadless(
-            verifyConfig,
-            this.config,
-          );
-
-          // Build a summary of the session for the verification agent
-          const history = this.getHistory();
-          const lastModelMessage = history
-            .filter((msg) => msg.role === 'model')
-            .pop();
-          const responseText =
-            lastModelMessage?.parts
-              ?.filter((p): p is { text: string } => 'text' in p)
-              .map((p) => p.text)
-              .join('') || '[no response text]';
-
-          const verifyPrompt = `Review the following assistant response for completeness and correctness. Check that all requested work was done, there are no obvious errors, and no files were left in a broken state.\n\nAssistant's final response:\n${responseText}`;
-
-          const verifyContext = new ContextState();
-          verifyContext.set('task_prompt', verifyPrompt);
-          await verifyAgent.execute(verifyContext, signal);
-
-          if (!signal.aborted) {
-            const verifyResult = verifyAgent.getFinalText();
-
-            // Parse the verification result JSON
-            try {
-              const jsonMatch = verifyResult.match(
-                /\{[\s\S]*"passed"\s*:\s*(true|false)[\s\S]*\}/,
-              );
-              if (jsonMatch) {
-                const parsed = JSON.parse(jsonMatch[0]) as {
-                  passed: boolean;
-                  issues?: string[];
-                  summary?: string;
-                };
-
-                if (
-                  !parsed.passed &&
-                  parsed.issues &&
-                  parsed.issues.length > 0
-                ) {
-                  const issueList = parsed.issues
-                    .map((issue: string) => `- ${issue}`)
-                    .join('\n');
-                  const continueReason = `Verification agent found issues that must be addressed before completing:\n${issueList}\n\nPlease fix these issues now.`;
-                  const continueRequest = [{ text: continueReason }];
-                  const verifyResult2 = yield* this.sendMessageStream(
-                    continueRequest,
-                    signal,
-                    prompt_id,
-                    { type: SendMessageType.Hook },
-                    boundedTurns - 1,
-                  );
-                  if (ownsTurnSpan) endTurnSpan('ok');
-                  return verifyResult2;
-                }
-              }
-            } catch {
-              debugLogger.warn(
-                '[Verification] Failed to parse verification agent output, allowing completion',
-              );
-            }
-          }
-        } catch (verifyError) {
-          debugLogger.warn(
-            `[Verification] Verification agent failed, allowing completion: ${verifyError}`,
-          );
-        }
       }
     }
 

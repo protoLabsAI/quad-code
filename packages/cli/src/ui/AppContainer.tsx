@@ -70,7 +70,6 @@ import { clearScreen } from '../utils/stdioHelpers.js';
 import { useTextBuffer } from './components/shared/text-buffer.js';
 import { useLogger } from './hooks/useLogger.js';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
-import { useRecap } from './hooks/useRecap.js';
 import { useVim } from './hooks/vim.js';
 import { isBtwCommand } from './utils/commandUtils.js';
 import { type LoadedSettings, SettingScope } from '../config/settings.js';
@@ -767,18 +766,6 @@ export const AppContainer = (props: AppContainerProps) => {
     isPermissionsDialogOpen,
     settingInputRequests,
     pendingGeminiHistoryItems,
-  });
-
-  // Recap card after long agent turns (※ where we left off)
-  useRecap({
-    config,
-    geminiClient,
-    streamingState,
-    history: historyManager.history,
-    addItem: historyManager.addItem,
-    enabled: settings.merged.recap?.enabled ?? true,
-    thresholdSeconds: settings.merged.recap?.thresholdSeconds ?? 300,
-    thresholdToolCalls: settings.merged.recap?.thresholdToolCalls ?? 15,
   });
 
   // Callback for handling final submit (must be after addMessage from useMessageQueue)
