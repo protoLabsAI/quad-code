@@ -1057,6 +1057,99 @@ describe('useGeminiStream', () => {
       // Nothing should happen because the state is not `Responding`
       expect(abortSpy).not.toHaveBeenCalled();
     });
+
+    it('should not schedule tool calls collected before a UserCancelled event', async () => {
+      // Repro for chat-stream cancel race: model emits a ToolCallRequest in
+      // one chunk, then UserCancelled in the next (e.g. user pressed Esc
+      // mid-stream and turn.ts converted the abort into a UserCancelled
+      // event). The for-await previously ran past the cancel and scheduled
+      // the queued tool call after the fact, leaving streamingState stuck.
+      mockSendMessageStream.mockReturnValue(
+        (async function* () {
+          yield {
+            type: ServerGeminiEventType.ToolCallRequest,
+            value: {
+              callId: 'call-after-cancel',
+              name: 'shell',
+              args: { command: 'echo hi' },
+            },
+          };
+          yield { type: ServerGeminiEventType.UserCancelled };
+        })(),
+      );
+
+      const { result } = renderTestHook();
+
+      await act(async () => {
+        await result.current.submitQuery('test query');
+      });
+
+      await waitFor(() => {
+        expect(mockAddItem).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'info',
+            text: 'User cancelled the request.',
+          }),
+          expect.any(Number),
+        );
+      });
+
+      expect(mockScheduleToolCalls).not.toHaveBeenCalled();
+      expect(result.current.streamingState).toBe(StreamingState.Idle);
+    });
+
+    it('should not schedule tool calls when the abort signal is set before the stream ends', async () => {
+      // Second arm of the same race: abort fires while the stream is
+      // still iterating, but the underlying SDK delivers the buffered
+      // ToolCallRequest chunk before honoring the abort. Stream then
+      // ends naturally (no UserCancelled event). Without the
+      // !signal.aborted guard at scheduleToolCalls, the post-loop
+      // schedule fires with an aborted signal and the React state
+      // briefly flips toolCalls into 'validating' — sticking the spinner.
+      let yieldToolCall: () => void;
+      const toolCallGate = new Promise<void>((r) => {
+        yieldToolCall = r;
+      });
+
+      mockSendMessageStream.mockReturnValue(
+        (async function* () {
+          yield { type: ServerGeminiEventType.Content, value: 'partial' };
+          await toolCallGate;
+          yield {
+            type: ServerGeminiEventType.ToolCallRequest,
+            value: {
+              callId: 'call-mid-cancel',
+              name: 'shell',
+              args: { command: 'ls' },
+            },
+          };
+        })(),
+      );
+
+      const { result } = renderTestHook();
+
+      await act(async () => {
+        result.current.submitQuery('test query');
+      });
+
+      await waitFor(() => {
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+      });
+
+      // User presses Esc before the buffered tool-call chunk gets delivered.
+      act(() => {
+        result.current.cancelOngoingRequest();
+      });
+
+      // SDK now delivers the chunk that was already in flight, then ends.
+      await act(async () => {
+        yieldToolCall!();
+        await new Promise((r) => setTimeout(r, 10));
+      });
+
+      expect(mockScheduleToolCalls).not.toHaveBeenCalled();
+      expect(result.current.streamingState).toBe(StreamingState.Idle);
+    });
   });
 
   describe('Slash Command Handling', () => {

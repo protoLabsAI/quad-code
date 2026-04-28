@@ -1220,7 +1220,13 @@ export const useGeminiStream = (
             case ServerGeminiEventType.UserCancelled:
               flushBufferedStreamEvents();
               handleUserCancelledEvent(userMessageTimestamp);
-              break;
+              // Stop processing immediately. A plain `break` only exits the
+              // switch — the for-await would continue to the next chunk and
+              // any toolCallRequests already accumulated this iteration would
+              // still get scheduled at line 1302 below. That left the spinner
+              // stuck during chat-stream cancels (chat-only freeze, distinct
+              // from the tool-execution cancel covered by #145 / #152).
+              return StreamProcessingStatus.UserCancelled;
             case ServerGeminiEventType.Error:
               flushBufferedStreamEvents();
               handleErrorEvent(event.value, userMessageTimestamp);
@@ -1299,7 +1305,16 @@ export const useGeminiStream = (
         discardBufferedStreamEvents();
         flushBufferedStreamEventsRef.current.delete(flushBufferedStreamEvents);
       }
-      if (toolCallRequests.length > 0) {
+      // Skip scheduling if the user already cancelled. The for-await may
+      // have collected toolCallRequests from a chunk that arrived in the
+      // same tick as the abort (e.g. model emits finish_reason=tool_calls
+      // right as the user presses Esc). Scheduling them post-cancel adds
+      // 'validating' tools to the React state — which flips streamingState
+      // back to Responding before the per-tool aborted check at
+      // coreToolScheduler.ts:861 can mark them 'cancelled'. The 3s
+      // forceCancelStaleToolCalls rescue eventually clears it, but the
+      // user sees a stuck spinner until then.
+      if (toolCallRequests.length > 0 && !signal.aborted) {
         scheduleToolCalls(toolCallRequests, signal);
       }
       return StreamProcessingStatus.Completed;
