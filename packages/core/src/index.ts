@@ -240,7 +240,7 @@ export * from './agents/index.js';
 export * from './followup/index.js';
 
 // ============================================================================
-// Recap (long-turn summary card)
+// Recap (on-demand "where we left off" summary, emitted by /recap)
 // ============================================================================
 
 export * from './recap/index.js';

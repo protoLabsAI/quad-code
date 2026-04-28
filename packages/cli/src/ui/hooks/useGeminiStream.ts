@@ -526,10 +526,10 @@ export const useGeminiStream = (
     setIsResponding(false);
     setShellInputFocused(false);
 
-    // Close any leaked OTel turn span so the recap / prompt-suggestion
-    // LLM calls that fire on streamingState=Idle don't get nested under
-    // a still-open turn span (Langfuse otherwise reports the turn as
-    // running until the next prompt opens a new span).
+    // Close any leaked OTel turn span so the side LLM calls that fire on
+    // streamingState=Idle (evolve pass, session-memory extractor) don't
+    // get nested under a still-open turn span (Langfuse otherwise reports
+    // the turn as running until the next prompt opens a new span).
     endTurnSpan('ok');
 
     // Immediately flip responseSubmittedToGemini=true on every current

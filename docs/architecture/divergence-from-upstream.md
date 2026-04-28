@@ -463,7 +463,7 @@ than the upstream auth/config dance.
 
 ### 7.3 New slash commands (over upstream)
 
-`/notes`, `/rewind`, `/team`, `/voice`, `/setup`, `/insight`,
+`/notes`, `/rewind`, `/team`, `/voice`, `/setup`, `/insight`, `/recap`,
 `/setup-github`, `/skills` (registered explicitly in
 `BuiltinCommandLoader.ts:34-115`).
 
