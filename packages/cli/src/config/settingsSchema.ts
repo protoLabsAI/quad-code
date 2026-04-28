@@ -1724,49 +1724,6 @@ const SETTINGS_SCHEMA = {
     },
   },
 
-  recap: {
-    type: 'object',
-    label: 'Recap',
-    category: 'Recap',
-    requiresRestart: false,
-    default: {},
-    description:
-      'After a long agent turn, append a short "where we left off" card to the transcript.',
-    showInDialog: false,
-    properties: {
-      enabled: {
-        type: 'boolean',
-        label: 'Recap Enabled',
-        category: 'Recap',
-        requiresRestart: false,
-        default: true,
-        description:
-          'When enabled, a 1-3 sentence recap is appended after agent turns that exceed thresholdSeconds or thresholdToolCalls. Toggle with /recap enable|disable.',
-        showInDialog: true,
-      },
-      thresholdSeconds: {
-        type: 'number',
-        label: 'Recap Duration Threshold (seconds)',
-        category: 'Recap',
-        requiresRestart: false,
-        default: 300,
-        description:
-          'Minimum agent-turn wall-clock duration (seconds) before a recap fires.',
-        showInDialog: true,
-      },
-      thresholdToolCalls: {
-        type: 'number',
-        label: 'Recap Tool-Call Threshold',
-        category: 'Recap',
-        requiresRestart: false,
-        default: 15,
-        description:
-          'Minimum tool-call count in a single turn before a recap fires.',
-        showInDialog: true,
-      },
-    },
-  },
-
   insight: {
     type: 'object',
     label: 'Insight',
